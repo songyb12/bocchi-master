@@ -1,0 +1,161 @@
+import { useState, useCallback, useMemo, type Dispatch, type SetStateAction } from 'react'
+import type { InstrumentConfig } from '../types/music'
+import { INSTRUMENTS, STANDARD_GUITAR } from '../constants/tunings'
+import { loadSettings, saveSettings, isOnboardingDone, markOnboardingDone } from '../utils/storage'
+import {
+  type PanelTab, type SkillProfile, type PanelId,
+  PANEL_TAB_KEY, SKILL_PROFILE_KEY,
+  isPanelVisible, getVisibleTabs,
+} from '../utils/panelConfig'
+
+// App mode: 'free' = 기존 자유 연습, 'curriculum' = 커리큘럼 학습
+type AppMode = 'free' | 'curriculum'
+const APP_MODE_KEY = 'bocchi-app-mode'
+
+// UI mode: 'beginner' = simplified tabs, 'advanced' = all features
+export type UiMode = 'beginner' | 'advanced'
+const UI_MODE_KEY = 'bocchi-ui-mode'
+
+function resolveInstrument(name: string, type: string): InstrumentConfig {
+  return INSTRUMENTS.find((i) => i.name === name)
+    ?? INSTRUMENTS.find((i) => i.type === type)
+    ?? STANDARD_GUITAR
+}
+
+// Read initial settings once at module load
+const initialSettings = loadSettings()
+
+export { initialSettings }
+
+export interface UseAppSettingsReturn {
+  appMode: AppMode
+  switchToFree: () => void
+  switchToCurriculum: () => void
+  panelTab: PanelTab
+  handlePanelTabChange: (tab: PanelTab) => void
+  skillProfile: SkillProfile
+  visibleTabs: PanelTab[]
+  showPanel: (id: PanelId) => boolean
+  handleSkillProfileChange: (profile: SkillProfile) => void
+  uiMode: UiMode
+  handleUiModeChange: (mode: UiMode) => void
+  showFlatList: boolean
+  showOnboarding: boolean
+  handleOnboardingComplete: (selectedInstrument: InstrumentConfig, goToCurriculum: boolean) => void
+  instrument: InstrumentConfig
+  setInstrument: Dispatch<SetStateAction<InstrumentConfig>>
+  showShortcutHelp: boolean
+  setShowShortcutHelp: Dispatch<SetStateAction<boolean>>
+  beatFlashEnabled: boolean
+  setBeatFlashEnabled: Dispatch<SetStateAction<boolean>>
+}
+
+export function useAppSettings(): UseAppSettingsReturn {
+  // ── App Mode Toggle ──
+  const [appMode, setAppMode] = useState<AppMode>(
+    () => { const v = localStorage.getItem(APP_MODE_KEY); return v === 'free' || v === 'curriculum' ? v : 'free' },
+  )
+  const switchToFree = useCallback(() => { setAppMode('free'); localStorage.setItem(APP_MODE_KEY, 'free') }, [])
+  const switchToCurriculum = useCallback(() => { setAppMode('curriculum'); localStorage.setItem(APP_MODE_KEY, 'curriculum') }, [])
+
+  // ── Panel Tab ──
+  const [panelTab, setPanelTab] = useState<PanelTab>(
+    () => { const v = localStorage.getItem(PANEL_TAB_KEY); return (v === 'play' || v === 'drill' || v === 'theory' || v === 'tools' || v === 'stats' || v === 'song') ? v : 'play' },
+  )
+  const handlePanelTabChange = useCallback((tab: PanelTab) => {
+    setPanelTab(tab)
+    localStorage.setItem(PANEL_TAB_KEY, tab)
+  }, [])
+
+  // ── Skill Profile ──
+  const [skillProfile, setSkillProfile] = useState<SkillProfile>(
+    () => {
+      const v = localStorage.getItem(SKILL_PROFILE_KEY)
+      return (v === 'beginner' || v === 'intermediate' || v === 'advanced') ? v : 'beginner'
+    },
+  )
+
+  // ── UI Mode (beginner/advanced toggle) ──
+  const [uiMode, setUiMode] = useState<UiMode>(
+    () => { const v = localStorage.getItem(UI_MODE_KEY); return v === 'advanced' ? v : 'beginner' },
+  )
+
+  // effectiveProfile: beginner uiMode forces 'beginner', advanced uses actual skillProfile
+  const effectiveProfile: SkillProfile = uiMode === 'beginner' ? 'beginner' : skillProfile
+  // showFlatList: preserve old flat-list behavior only in advanced mode with beginner skillProfile
+  const showFlatList = uiMode === 'advanced' && skillProfile === 'beginner'
+
+  const visibleTabs = useMemo(() => getVisibleTabs(effectiveProfile), [effectiveProfile])
+  const showPanel = useCallback((id: PanelId) => isPanelVisible(id, effectiveProfile), [effectiveProfile])
+
+  const handleSkillProfileChange = useCallback((profile: SkillProfile) => {
+    setSkillProfile(profile)
+    localStorage.setItem(SKILL_PROFILE_KEY, profile)
+    const ep = uiMode === 'beginner' ? 'beginner' as SkillProfile : profile
+    const newVisible = getVisibleTabs(ep)
+    setPanelTab(prev => {
+      if (!newVisible.includes(prev)) {
+        const next = newVisible[0] ?? 'play'
+        localStorage.setItem(PANEL_TAB_KEY, next)
+        return next
+      }
+      return prev
+    })
+  }, [uiMode])
+
+  const handleUiModeChange = useCallback((mode: UiMode) => {
+    setUiMode(mode)
+    localStorage.setItem(UI_MODE_KEY, mode)
+    const ep: SkillProfile = mode === 'beginner' ? 'beginner' : skillProfile
+    const newVisible = getVisibleTabs(ep)
+    setPanelTab(prev => {
+      if (!newVisible.includes(prev)) {
+        const next = newVisible[0] ?? 'play'
+        localStorage.setItem(PANEL_TAB_KEY, next)
+        return next
+      }
+      return prev
+    })
+  }, [skillProfile])
+
+  // ── Onboarding Wizard ──
+  const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingDone())
+
+  // ── Instrument ──
+  const [instrument, setInstrument] = useState<InstrumentConfig>(
+    resolveInstrument(initialSettings.instrumentName, initialSettings.instrumentType),
+  )
+
+  const handleOnboardingComplete = useCallback((selectedInstrument: InstrumentConfig, goToCurriculum: boolean) => {
+    markOnboardingDone()
+    setShowOnboarding(false)
+    setInstrument(selectedInstrument)
+    saveSettings({ instrumentType: selectedInstrument.type, instrumentName: selectedInstrument.name })
+    if (goToCurriculum) {
+      setAppMode('curriculum')
+      localStorage.setItem(APP_MODE_KEY, 'curriculum')
+    }
+  }, [])
+
+  // ── UI toggles ──
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false)
+  const [beatFlashEnabled, setBeatFlashEnabled] = useState(false)
+
+  return {
+    // App mode
+    appMode, switchToFree, switchToCurriculum,
+    // Panel tab
+    panelTab, handlePanelTabChange,
+    // Skill profile
+    skillProfile, visibleTabs, showPanel, handleSkillProfileChange,
+    // UI mode
+    uiMode, handleUiModeChange, showFlatList,
+    // Onboarding
+    showOnboarding, handleOnboardingComplete,
+    // Instrument
+    instrument, setInstrument,
+    // UI
+    showShortcutHelp, setShowShortcutHelp,
+    beatFlashEnabled, setBeatFlashEnabled,
+  }
+}
