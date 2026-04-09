@@ -102,14 +102,14 @@ export function PracticeTimerPanel({ isActive }: PracticeTimerPanelProps) {
   // Auto-flush to daily log every 30 seconds while running
   useEffect(() => {
     if (running && elapsedSeconds > 0 && elapsedSeconds % 30 === 0) {
-      flushToDailyLog()
+      flushToDailyLog() // eslint-disable-line react-hooks/set-state-in-effect -- periodic flush to localStorage
     }
   }, [running, elapsedSeconds, flushToDailyLog])
 
   // Check countdown completion
   useEffect(() => {
     if (mode === 'countdown' && running && elapsedSeconds >= totalGoalSeconds) {
-      setRunning(false)
+      setRunning(false) // eslint-disable-line react-hooks/set-state-in-effect -- countdown completion
       setCompleted(true)
       flushToDailyLog()
       getSharedAudioContext().then(ctx => {
@@ -137,12 +137,12 @@ export function PracticeTimerPanel({ isActive }: PracticeTimerPanelProps) {
   // Only isActive should trigger this — running/elapsedSeconds/expanded are guards, not triggers.
   // Read guards via refs so they don't restart the effect (which would auto-start mid-session).
   const runningRef = useRef(running)
-  runningRef.current = running
+  useEffect(() => { runningRef.current = running }, [running])
   const expandedRef = useRef(expanded)
-  expandedRef.current = expanded
+  useEffect(() => { expandedRef.current = expanded }, [expanded])
   useEffect(() => {
     if (isActive && !runningRef.current && elapsedRef.current === 0 && expandedRef.current) {
-      startTimer()
+      startTimer() // eslint-disable-line react-hooks/set-state-in-effect -- auto-start on activity
     }
   }, [isActive, startTimer])
 

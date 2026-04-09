@@ -133,7 +133,7 @@ export function useChordProgression(opts: UseChordProgressionOptions) {
   useEffect(() => {
     if (isOptimized && optimizedIndices.length > 0) {
       const optIdx = optimizedIndices[activeChordIndex] ?? 0
-      setVoicingIndex(optIdx)
+      setVoicingIndex(optIdx) // eslint-disable-line react-hooks/set-state-in-effect -- sync voicing with chord change
     } else if (isAutoChordChange.current) {
       setVoicingIndex(0)
     }
@@ -143,7 +143,7 @@ export function useChordProgression(opts: UseChordProgressionOptions) {
   // Clamp voicingIndex when voicing list changes
   useEffect(() => {
     if (availableVoicings.length > 0 && voicingIndex >= availableVoicings.length) {
-      setVoicingIndex(0)
+      setVoicingIndex(0) // eslint-disable-line react-hooks/set-state-in-effect -- clamp out-of-bounds index
     }
   }, [availableVoicings.length, voicingIndex])
 
@@ -186,14 +186,14 @@ export function useChordProgression(opts: UseChordProgressionOptions) {
         return
       }
       isAutoChordChange.current = true
-      setActiveChordIndex(metronomeMeasure % resolvedChords.length)
+      setActiveChordIndex(metronomeMeasure % resolvedChords.length) // eslint-disable-line react-hooks/set-state-in-effect -- sync chord with metronome
     }
   }, [metronomeMeasure, metronomeIsPlaying, resolvedChords.length, loopCount, metronomeStop])
 
   // Reset activeChordIndex when progression changes
   useEffect(() => {
     isAutoChordChange.current = true
-    setActiveChordIndex(0)
+    setActiveChordIndex(0) // eslint-disable-line react-hooks/set-state-in-effect -- reset on progression change
   }, [progressionKey, progressionPreset])
 
   return {

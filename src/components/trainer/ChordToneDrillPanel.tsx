@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import type { NoteName } from '../../types/music'
 import { CHROMATIC_SCALE } from '../../constants/notes'
 
@@ -58,13 +58,13 @@ export function ChordToneDrillPanel({
   const [mode, setMode] = useState<'free' | 'sequence'>('sequence')
 
   // Build targets from chord intervals
-  const targets: ChordToneTarget[] = chordRoot && chordIntervals.length > 0
+  const targets: ChordToneTarget[] = useMemo(() => chordRoot && chordIntervals.length > 0
     ? chordIntervals.map((semi, i) => ({
         noteName: chordNotes[i] ?? CHROMATIC_SCALE[(CHROMATIC_SCALE.indexOf(chordRoot) + semi) % 12],
         intervalLabel: TONE_LABELS[semi] ?? `${semi}st`,
         semitones: semi,
       }))
-    : []
+    : [], [chordRoot, chordIntervals, chordNotes])
 
   const currentTarget = targets[currentToneIndex] ?? null
 
@@ -73,7 +73,7 @@ export function ChordToneDrillPanel({
   useEffect(() => {
     if (chordName !== prevChordRef.current) {
       prevChordRef.current = chordName
-      if (active) setCurrentToneIndex(0)
+      if (active) setCurrentToneIndex(0) // eslint-disable-line react-hooks/set-state-in-effect -- reset index on chord change
     }
   }, [chordName, active])
 
@@ -97,7 +97,7 @@ export function ChordToneDrillPanel({
       const isCorrect = currentTarget !== null && playedName === currentTarget.noteName
       const label = currentTarget?.intervalLabel ?? 'R'
 
-      setLastResult(isCorrect ? 'correct' : 'incorrect')
+      setLastResult(isCorrect ? 'correct' : 'incorrect') // eslint-disable-line react-hooks/set-state-in-effect -- evaluating MIDI input
       setStats(prev => {
         const toneStat = prev.perTone[label] ?? { total: 0, correct: 0 }
         return {

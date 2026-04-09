@@ -83,15 +83,10 @@ function calculateStreak(sessions: PracticeSession[]): { current: number; best: 
  * Shows recent sessions, total practice time, and accuracy trends.
  */
 export const PracticeHistoryPanel = memo(function PracticeHistoryPanel() {
-  const [sessions, setSessions] = useState<PracticeSession[]>([])
+  const [sessions, setSessions] = useState<PracticeSession[]>(() => loadSettings().practiceHistory)
   const [expanded, setExpanded] = useState(false)
   const [editingNoteIdx, setEditingNoteIdx] = useState<number | null>(null)
   const [noteText, setNoteText] = useState('')
-
-  useEffect(() => {
-    const settings = loadSettings()
-    setSessions(settings.practiceHistory)
-  }, [])
 
   // Refresh sessions when component becomes visible (practice might have ended)
   useEffect(() => {

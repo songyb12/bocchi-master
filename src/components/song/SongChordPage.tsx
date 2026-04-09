@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { Song } from '../../types/song'
 import { getAllSongs, deleteSong } from '../../data/songStore'
 import { SongSearchBar } from './SongSearchBar'
@@ -18,11 +18,11 @@ export function SongChordPage({ onViewOnFretboard }: SongChordPageProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [songsVersion, setSongsVersion] = useState(0)
 
-  const recommended = useMemo(() => {
-    void songsVersion // trigger recalculation
+  const [recommended, setRecommended] = useState<Song[]>([])
+  useEffect(() => {
     const all = getAllSongs()
     const shuffled = [...all].sort(() => Math.random() - 0.5)
-    return shuffled.slice(0, 5)
+    setRecommended(shuffled.slice(0, 5)) // eslint-disable-line react-hooks/set-state-in-effect -- shuffle on version change
   }, [songsVersion])
 
   const handleSelect = (song: Song) => {

@@ -274,18 +274,11 @@ function accBg(acc: number): string {
 }
 
 export const WeaknessAnalysisPanel = memo(function WeaknessAnalysisPanel() {
-  const [sessions, setSessions] = useState<PracticeSession[]>([])
-  const [profile, setProfile] = useState<PlayerProfile | null>(null)
-  const [progress, setProgress] = useState<CurriculumProgress | null>(null)
-  const [dailyGoalMinutes, setDailyGoalMinutes] = useState(30)
+  const [sessions, setSessions] = useState<PracticeSession[]>(() => loadSettings().practiceHistory)
+  const [profile, setProfile] = useState<PlayerProfile | null>(() => loadPlayerProfile())
+  const [progress, setProgress] = useState<CurriculumProgress | null>(() => loadCurriculumProgress())
+  const [dailyGoalMinutes] = useState(() => loadDailyGoal().targetMinutes)
   const [expanded, setExpanded] = useState(true)
-
-  useEffect(() => {
-    setSessions(loadSettings().practiceHistory)
-    setProfile(loadPlayerProfile())
-    setProgress(loadCurriculumProgress())
-    setDailyGoalMinutes(loadDailyGoal().targetMinutes)
-  }, [])
 
   // Refresh periodically
   useEffect(() => {

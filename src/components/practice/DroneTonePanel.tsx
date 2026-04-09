@@ -36,7 +36,7 @@ export function DroneTonePanel({ activeRoot }: { activeRoot?: NoteName | null })
 
   // Sync with active root from progression/scale
   useEffect(() => {
-    if (activeRoot && !playing) setNote(activeRoot)
+    if (activeRoot && !playing) setNote(activeRoot) // eslint-disable-line react-hooks/set-state-in-effect -- sync with progression root
   }, [activeRoot, playing])
 
   const startingRef = useRef(false)
@@ -98,7 +98,7 @@ export function DroneTonePanel({ activeRoot }: { activeRoot?: NoteName | null })
 
   // Cleanup on unmount — use ref so the latest stopDrone is called without adding it to deps
   const stopDroneRef = useRef(stopDrone)
-  stopDroneRef.current = stopDrone
+  useEffect(() => { stopDroneRef.current = stopDrone }, [stopDrone])
   useEffect(() => () => { stopDroneRef.current() }, [])
 
   if (!expanded) {

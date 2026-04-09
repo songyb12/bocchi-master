@@ -79,7 +79,7 @@ function CurriculumModeInner({ onSwitchToFreeMode }: CurriculumModeProps) {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [state.view, actions.goBack])
+  }, [state.view, actions])
 
   return (
     <div className="max-w-3xl mx-auto">

@@ -383,15 +383,16 @@ function FretboardQuizDrill({ drill, onFinish }: {
     setFeedback(null)
   }, [notePool])
 
-  // Compute choices deterministically from targetNote — useMemo triggers re-render on change
-  const choices = useMemo(() => {
+  // Compute choices when targetNote changes — use state+effect to keep Math.random out of render
+  const [choices, setChoices] = useState<string[]>([])
+  useEffect(() => {
     const pool = [...notePool].filter(n => n !== targetNote)
     const distractors: string[] = []
     while (distractors.length < Math.min(3, pool.length)) {
       const idx = Math.floor(Math.random() * pool.length)
       distractors.push(pool.splice(idx, 1)[0])
     }
-    return [targetNote, ...distractors].sort(() => Math.random() - 0.5)
+    setChoices([targetNote, ...distractors].sort(() => Math.random() - 0.5)) // eslint-disable-line react-hooks/set-state-in-effect -- sync choices with target change
   }, [targetNote, notePool])
 
   const handleAnswer = useCallback((note: string) => {

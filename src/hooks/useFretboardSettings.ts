@@ -94,7 +94,7 @@ export function useFretboardSettings(instrument: InstrumentConfig): UseFretboard
 
   // Reset fret range when instrument or capo changes
   useEffect(() => {
-    setFretRange([0, effectiveInstrument.fretCount])
+    setFretRange([0, effectiveInstrument.fretCount]) // eslint-disable-line react-hooks/set-state-in-effect -- reset range on instrument change
   }, [effectiveInstrument.fretCount])
 
   // String focus (dim unselected strings)

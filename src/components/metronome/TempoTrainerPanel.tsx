@@ -99,7 +99,7 @@ export function TempoTrainerPanel({
 
       if (newBpm >= goal.targetBpm) {
         onBpmChange(goal.targetBpm)
-        setReachedTarget(true)
+        setReachedTarget(true) // eslint-disable-line react-hooks/set-state-in-effect -- intentional: sync with metronome measure
       } else {
         onBpmChange(newBpm)
       }
@@ -109,7 +109,7 @@ export function TempoTrainerPanel({
   // Stop trainer when metronome stops
   useEffect(() => {
     if (!isPlaying && active) {
-      handleStop()
+      handleStop() // eslint-disable-line react-hooks/set-state-in-effect -- intentional: stop trainer when metronome stops
     }
   }, [isPlaying, active, handleStop])
 

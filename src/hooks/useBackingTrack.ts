@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import type { NoteName } from '../types/music'
 import {
   BACKING_STYLES,
@@ -37,13 +37,13 @@ export function useBackingTrack(
 
   // Use refs to avoid stale closures in the schedule callback
   const enabledRef = useRef(enabled)
-  enabledRef.current = enabled
   const drumVolRef = useRef(drumVolume)
-  drumVolRef.current = drumVolume
   const bassVolRef = useRef(bassVolume)
-  bassVolRef.current = bassVolume
   const styleRef = useRef(styleIndex)
-  styleRef.current = styleIndex
+  useEffect(() => { enabledRef.current = enabled }, [enabled])
+  useEffect(() => { drumVolRef.current = drumVolume }, [drumVolume])
+  useEffect(() => { bassVolRef.current = bassVolume }, [bassVolume])
+  useEffect(() => { styleRef.current = styleIndex }, [styleIndex])
 
   const toggle = useCallback(() => setEnabled((v) => !v), [])
 

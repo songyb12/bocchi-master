@@ -72,7 +72,7 @@ export const FretboardQuizPanel = forwardRef<FretboardQuizHandle, FretboardQuizP
   // Cancel countdown interval on unmount
   useEffect(() => () => stopTimer(), [stopTimer])
 
-  const generateNote = useCallback(() => {
+  const generateNote = useCallback(function generate() {
     const config = DIFFICULTY_CONFIG[difficultyRef.current]
     let note: NoteName
     do {
@@ -93,7 +93,7 @@ export const FretboardQuizPanel = forwardRef<FretboardQuizHandle, FretboardQuizP
             stopTimer()
             setStats((s) => ({ ...s, total: s.total + 1, streak: 0 }))
             setLastResult('wrong')
-            setTimeout(() => generateNote(), 400)
+            setTimeout(() => generate(), 400)
             return null
           }
           return prev - 1
@@ -141,7 +141,7 @@ export const FretboardQuizPanel = forwardRef<FretboardQuizHandle, FretboardQuizP
 
       return isCorrect
     },
-    [targetNote, generateNote],
+    [targetNote, generateNote, stopTimer],
   )
 
   // Expose checkAnswer to parent via imperative handle

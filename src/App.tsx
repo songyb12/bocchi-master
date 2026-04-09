@@ -128,11 +128,12 @@ export default function App() {
   // every render (App re-renders on every metronome beat via currentBeat state),
   // so we use refs to avoid replaying the last MIDI note on every beat tick.
   const soundEngineRef = useRef(soundEngine)
-  soundEngineRef.current = soundEngine
+  useEffect(() => { soundEngineRef.current = soundEngine }, [soundEngine])
   const practiceRef = useRef(practice)
-  practiceRef.current = practice
+  useEffect(() => { practiceRef.current = practice }, [practice])
 
   // Play sound + evaluate practice when MIDI note arrives
+  const rhythmEvaluate = rhythmScore.evaluate
   useEffect(() => {
     if (!midi.lastNote) return
     const midiNum = midi.lastNote.note
@@ -140,8 +141,8 @@ export default function App() {
     const octave = Math.floor(midiNum / 12) - 1
     soundEngineRef.current.playFretboardNote({ name, octave, midiNumber: midiNum })
     practiceRef.current.evaluateNote(midiNum)
-    rhythmScore.evaluate()
-  }, [midi.lastNote, rhythmScore.evaluate])
+    rhythmEvaluate()
+  }, [midi.lastNote, rhythmEvaluate])
 
   // Scale/Chord overlay state
   const [selectedRoot, setSelectedRoot] = useState<NoteName | null>(
@@ -163,13 +164,14 @@ export default function App() {
 
   // Combined beat schedule callback: backing track + rhythm scoring
   const rhythmRecordBeatRef = useRef(rhythmScore.recordBeat)
-  rhythmRecordBeatRef.current = rhythmScore.recordBeat
+  useEffect(() => { rhythmRecordBeatRef.current = rhythmScore.recordBeat }, [rhythmScore.recordBeat])
+  const backingOnBeat = backingTrack.onBeatSchedule
   const combinedOnBeatSchedule = useCallback(
     (beat: number, measure: number, time: number, ctx: AudioContext) => {
-      backingTrack.onBeatSchedule(beat, measure, time, ctx)
+      backingOnBeat(beat, measure, time, ctx)
       rhythmRecordBeatRef.current(beat, bpmRef.current)
     },
-    [backingTrack.onBeatSchedule],
+    [backingOnBeat],
   )
 
   // Metronome state (lifted from MetronomePanel)
@@ -338,11 +340,13 @@ export default function App() {
   }, [fretboardNoteNames, scaleOverlayNoteNames])
 
   // Keep practice mode target in sync
+  const practiceActive = practice.active
+  const practiceUpdateTarget = practice.updateTarget
   useEffect(() => {
-    if (practice.active && practiceTargetNotes.length > 0) {
-      practice.updateTarget(practiceTargetNotes)
+    if (practiceActive && practiceTargetNotes.length > 0) {
+      practiceUpdateTarget(practiceTargetNotes)
     }
-  }, [practiceTargetNotes, practice.active, practice.updateTarget])
+  }, [practiceTargetNotes, practiceActive, practiceUpdateTarget])
 
   // Practice mode toggle handler
   const handlePracticeToggle = useCallback(() => {
@@ -356,9 +360,9 @@ export default function App() {
   // Keyboard shortcuts (Space=play, ↑↓=BPM, ←→=chord, B=backing, P=practice)
   // Use a ref for bpm to avoid stale closure in the shortcut callbacks
   const bpmForShortcuts = useRef(metronome.bpm)
-  bpmForShortcuts.current = metronome.bpm
+  useEffect(() => { bpmForShortcuts.current = metronome.bpm }, [metronome.bpm])
   const chordsLenRef = useRef(resolvedChords.length)
-  chordsLenRef.current = resolvedChords.length
+  useEffect(() => { chordsLenRef.current = resolvedChords.length }, [resolvedChords.length])
 
   useKeyboardShortcuts(
     useMemo(
@@ -392,7 +396,8 @@ export default function App() {
         toggleCountIn: () => metronome.setCountIn(!metronome.countIn),
         toggleMute: () => metronome.setVolume(metronome.volume > 0 ? 0 : 0.8),
       }),
-      [metronome.toggle, metronome.stop, metronome.setBpm, metronome.subdivision, metronome.setSubdivision, metronome.countIn, metronome.setCountIn, metronome.volume, metronome.setVolume, backingTrack.toggle, handlePracticeToggle],
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- refs (isAutoChordChange, chordsLenRef, bpmForShortcuts) are stable; setters are stable
+      [metronome.toggle, metronome.stop, metronome.setBpm, metronome.subdivision, metronome.setSubdivision, metronome.countIn, metronome.setCountIn, metronome.volume, metronome.setVolume, backingTrack.toggle, handlePracticeToggle, setActiveChordIndex],
     ),
   )
 
@@ -438,7 +443,8 @@ export default function App() {
         if (v) soundEngine.playVoicing(v, effectiveInstrument)
       }
     },
-    [allProgressionVoicings, isOptimized, optimizedIndices, soundEngine, effectiveInstrument],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isAutoChordChange is a stable ref
+    [allProgressionVoicings, isOptimized, optimizedIndices, soundEngine, effectiveInstrument, setActiveChordIndex],
   )
 
   // ── Inline useCallback 끌어올림 (조건부 렌더링 안에서 hook 호출 금지) ──
@@ -462,7 +468,7 @@ export default function App() {
     } else {
       setSelectedRoot(key)
     }
-  }, [progressionPreset])
+  }, [progressionPreset, setProgressionKey])
 
   const handleFretboardQuizToggle = useCallback(() => setFretboardQuizActive((v) => !v), [])
 

@@ -29,7 +29,7 @@ export const MetronomePendulum = memo(function MetronomePendulum({
   const lastTimeRef = useRef(0)
   // Use a ref so the animation loop reads the current beat without restarting RAF
   const currentBeatRef = useRef(currentBeat)
-  currentBeatRef.current = currentBeat
+  useEffect(() => { currentBeatRef.current = currentBeat }, [currentBeat])
 
   useEffect(() => {
     const canvas = canvasRef.current

@@ -33,10 +33,10 @@ export function ChordTransitionTimer({
   const rafRef = useRef<number | null>(null)
 
   // Animate the timer display
-  const updateTimer = useCallback(() => {
+  const updateTimer = useCallback(function tick() {
     if (timerStart.current !== null) {
       setCurrentTime(performance.now() - timerStart.current)
-      rafRef.current = requestAnimationFrame(updateTimer)
+      rafRef.current = requestAnimationFrame(tick)
     }
   }, [])
 
