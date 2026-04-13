@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+/* ─── Neon Dark Theme ─────────────────────────────────── */
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-surface: #1a1a2e;
+  --bg-surface-hover: #22223a;
+
+  --text-primary: #e8e8f0;
+  --text-secondary: #8888aa;
+  --text-muted: #555570;
+
+  --neon-cyan: #00f0ff;
+  --neon-pink: #ff00aa;
+  --neon-green: #00ff88;
+  --neon-yellow: #ffee00;
+  --neon-red: #ff3355;
+  --neon-purple: #aa55ff;
+
+  --glow-cyan: 0 0 8px #00f0ff80, 0 0 20px #00f0ff40;
+  --glow-pink: 0 0 8px #ff00aa80, 0 0 20px #ff00aa40;
+  --glow-green: 0 0 8px #00ff8880, 0 0 20px #00ff8840;
+
+  --string-color: #667788;
+  --fret-color: #444455;
+  --cursor-color: #00f0ff;
+}
+
+/* ─── Base ────────────────────────────────────────────── */
+
+body {
+  margin: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Glow Animations ─────────────────────────────────── */
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes cursor-pulse {
+  0%, 100% { box-shadow: var(--glow-cyan); }
+  50% { box-shadow: 0 0 12px #00f0ffcc, 0 0 30px #00f0ff66; }
+}
+
+@keyframes hit-flash {
+  0% { transform: scale(1.5); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+.glow-cyan { text-shadow: var(--glow-cyan); }
+.glow-pink { text-shadow: var(--glow-pink); }
+.glow-green { text-shadow: var(--glow-green); }
+
+.neon-border {
+  border: 1px solid #00f0ff40;
+  box-shadow: inset 0 0 15px #00f0ff10, var(--glow-cyan);
+}
+
+/* ─── Scrollbar ───────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--bg-surface); border-radius: 3px; }
+
+/* ─── Responsive ──────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .neon-border { box-shadow: none; border: 1px solid #00f0ff20; }
+}
+
+/* ─── Range Slider Styling ────────────────────────────── */
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--bg-surface-hover);
+  border-radius: 2px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--neon-cyan);
+  cursor: pointer;
+  box-shadow: var(--glow-cyan);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--neon-cyan);
+  cursor: pointer;
+  border: none;
+  box-shadow: var(--glow-cyan);
+}

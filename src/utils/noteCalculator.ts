@@ -1,5 +1,5 @@
-import type { Note, NoteName } from '../types/music'
-import { CHROMATIC_SCALE } from '../constants/notes'
+import type { Note, NoteName } from '@/types/music'
+import { CHROMATIC_SCALE } from '@/data/notes'
 
 /**
  * Calculate the note at a given fret position.
