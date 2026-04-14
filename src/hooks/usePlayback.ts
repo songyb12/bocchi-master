@@ -26,10 +26,14 @@ export function usePlayback() {
     })
 
     engine.setBpm(state.bpm)
+    // Apply loop if set
+    if (state.loopStart !== null && state.loopEnd !== null) {
+      engine.setLoop(state.loopStart, state.loopEnd)
+    }
     engineRef.current = engine
     engine.start(1) // 1 bar count-in
     dispatch({ type: 'SET_STATUS', status: 'playing' })
-  }, [state.track, state.bpm, getAudioContext, dispatch])
+  }, [state.track, state.bpm, state.loopStart, state.loopEnd, getAudioContext, dispatch])
 
   const stop = useCallback(() => {
     engineRef.current?.stop()
@@ -51,5 +55,10 @@ export function usePlayback() {
     engineRef.current?.setBpm(bpm)
   }, [dispatch])
 
-  return { ...state, play, stop, togglePlay, setBpm }
+  const setLoop = useCallback((start: number | null, end: number | null) => {
+    dispatch({ type: 'SET_LOOP', start, end })
+    engineRef.current?.setLoop(start, end)
+  }, [dispatch])
+
+  return { ...state, play, stop, togglePlay, setBpm, setLoop }
 }

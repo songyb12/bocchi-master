@@ -1,0 +1,7 @@
+Installing BocchiMaster service...
+NOTE: Run this as Administrator
+Service installed successfully.
+
+Service installed successfully.
+Use "servy-cli start -n BocchiMaster" to start the service.
+계속하려면 아무 키나 누르십시오 . . . 

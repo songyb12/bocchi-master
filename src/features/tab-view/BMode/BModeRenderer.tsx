@@ -13,6 +13,9 @@ interface Props {
   currentBeat: number
   currentMeasure: number
   isPlaying: boolean
+  loopStart: number | null
+  loopEnd: number | null
+  onMeasureClick?: (measureIndex: number) => void
 }
 
 // Layout constants
@@ -22,7 +25,7 @@ const STRING_SPACING = 22
 const BEAT_WIDTH = 60
 const MEASURE_GAP = 20
 
-export function BModeRenderer({ track, currentBeat, currentMeasure, isPlaying }: Props) {
+export function BModeRenderer({ track, currentBeat, currentMeasure, isPlaying, loopStart, loopEnd, onMeasureClick }: Props) {
   const { tuning, events, measures, timeSignature } = track
   const stringCount = tuning.stringCount
   const beatsPerMeasure = timeSignature[0]
@@ -103,9 +106,33 @@ export function BModeRenderer({ track, currentBeat, currentMeasure, isPlaying }:
         )
       })}
 
+      {/* Loop highlight overlay */}
+      {loopStart !== null && loopEnd !== null && visibleMeasures.map((m, i) => {
+        const mStartBeat = m.startBeat
+        const mEndBeat = m.startBeat + beatsPerMeasure
+        // Check if this measure overlaps with the loop range
+        if (mStartBeat >= loopEnd || mEndBeat <= loopStart) return null
+        const x = MARGIN_LEFT + i * (beatsPerMeasure * BEAT_WIDTH + MEASURE_GAP)
+        const w = beatsPerMeasure * BEAT_WIDTH + MEASURE_GAP
+        return (
+          <rect
+            key={`loop-${m.index}`}
+            x={x}
+            y={MARGIN_TOP - 10}
+            width={w}
+            height={(stringCount - 1) * STRING_SPACING + 20}
+            fill="var(--neon-cyan)"
+            opacity={0.06}
+            rx={3}
+          />
+        )
+      })}
+
       {/* Measure bar lines */}
       {visibleMeasures.map((m, i) => {
         const x = MARGIN_LEFT + i * (beatsPerMeasure * BEAT_WIDTH + MEASURE_GAP)
+        const isInLoop = loopStart !== null && loopEnd !== null
+          && m.startBeat >= loopStart && m.startBeat < loopEnd
         return (
           <g key={`bar-${m.index}`}>
             <line
@@ -116,15 +143,17 @@ export function BModeRenderer({ track, currentBeat, currentMeasure, isPlaying }:
               stroke="var(--fret-color)"
               strokeWidth={2}
             />
-            {/* Measure number */}
+            {/* Clickable measure number */}
             <text
               x={x + 5}
               y={MARGIN_TOP - 12}
-              fill="var(--text-muted)"
+              fill={isInLoop ? 'var(--neon-green)' : 'var(--text-muted)'}
               fontSize={10}
               fontFamily="monospace"
+              style={{ cursor: 'pointer' }}
+              onClick={() => onMeasureClick?.(m.index)}
             >
-              {m.index + 1}
+              {isInLoop ? `⟳${m.index + 1}` : m.index + 1}
             </text>
             {/* Measure label */}
             {m.label && (

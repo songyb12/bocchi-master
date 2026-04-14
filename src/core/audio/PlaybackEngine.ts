@@ -26,6 +26,8 @@ export class PlaybackEngine {
   private callbacks: PlaybackCallbacks
   private volume = 0.6
   private countInBeats = 0
+  private loopStartBeat: number | null = null
+  private loopEndBeat: number | null = null
 
   constructor(
     audioContext: AudioContext,
@@ -67,6 +69,10 @@ export class PlaybackEngine {
 
   setBpm(bpm: number): void { this.bpm = bpm }
   setVolume(vol: number): void { this.volume = Math.max(0, Math.min(1, vol)) }
+  setLoop(startBeat: number | null, endBeat: number | null): void {
+    this.loopStartBeat = startBeat
+    this.loopEndBeat = endBeat
+  }
 
   private scheduler = (): void => {
     while (this.nextNoteTime < this.audioContext.currentTime + LOOKAHEAD) {
@@ -75,6 +81,12 @@ export class PlaybackEngine {
         this.nextNoteTime += 60.0 / this.bpm
         this.countInBeats--
         continue
+      }
+
+      // Loop: jump back to loop start when reaching loop end
+      if (this.loopStartBeat !== null && this.loopEndBeat !== null
+          && this.currentBeat >= this.loopEndBeat) {
+        this.currentBeat = this.loopStartBeat
       }
 
       // Check if we've reached the end
