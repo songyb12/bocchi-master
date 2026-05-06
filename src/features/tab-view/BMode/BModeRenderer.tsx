@@ -204,16 +204,26 @@ export function BModeRenderer({ track, currentBeat, currentMeasure, isPlaying, l
       )}
 
       {/* Notes */}
-      {visibleEvents.map(note => (
-        <NoteGlyph
-          key={note.id}
-          note={note}
-          x={beatToX(note.time)}
-          y={stringToY(note.string)}
-          isActive={isPlaying && Math.abs(note.time - currentBeat) < 0.01}
-          isPast={note.time < currentBeat}
-        />
-      ))}
+      {visibleEvents.map(note => {
+        // Only show technique label on the topmost (highest string index) note at same beat
+        const sameTimeNotes = visibleEvents.filter(e => Math.abs(e.time - note.time) < 0.01)
+        const topString = Math.max(...sameTimeNotes.map(e => e.string))
+        const showTechnique = note.string === topString
+        // Duration width in pixels
+        const durationWidth = note.duration * BEAT_WIDTH
+        return (
+          <NoteGlyph
+            key={note.id}
+            note={note}
+            x={beatToX(note.time)}
+            y={stringToY(note.string)}
+            isActive={isPlaying && Math.abs(note.time - currentBeat) < 0.01}
+            isPast={note.time < currentBeat}
+            showTechnique={showTechnique}
+            durationWidth={durationWidth}
+          />
+        )
+      })}
 
       {/* Playback cursor */}
       {isPlaying && currentBeat >= (visibleMeasures[0]?.startBeat ?? 0) && (
@@ -262,6 +272,21 @@ export function BModeRenderer({ track, currentBeat, currentMeasure, isPlaying, l
   )
 }
 
+// ─── Technique abbreviation map ─────────────────────────
+
+const TECHNIQUE_SYMBOL: Record<string, string> = {
+  'strum-down': '⬇',
+  'strum-up': '⬆',
+  'H': 'h',
+  'PO': 'p',
+  'S': '/',
+  'T': 'T',
+  'P': '⊙',
+  'x': 'x',
+  'bend': '↗',
+  'vibrato': '~',
+}
+
 // ─── Note Glyph ──────────────────────────────────────────
 
 interface NoteGlyphProps {
@@ -270,9 +295,11 @@ interface NoteGlyphProps {
   y: number
   isActive: boolean
   isPast: boolean
+  showTechnique: boolean
+  durationWidth: number
 }
 
-function NoteGlyph({ note, x, y, isActive, isPast }: NoteGlyphProps) {
+function NoteGlyph({ note, x, y, isActive, isPast, showTechnique, durationWidth }: NoteGlyphProps) {
   const text = note.fret === -1 ? 'x' : String(note.fret)
   const fill = isActive
     ? 'var(--neon-cyan)'
@@ -282,6 +309,19 @@ function NoteGlyph({ note, x, y, isActive, isPast }: NoteGlyphProps) {
 
   return (
     <g filter={isActive ? 'url(#note-glow)' : undefined}>
+      {/* Duration bar (horizontal line showing note length) */}
+      {durationWidth > 12 && (
+        <line
+          x1={x + 10}
+          y1={y}
+          x2={x + durationWidth - 2}
+          y2={y}
+          stroke={isActive ? 'var(--neon-cyan)' : isPast ? 'var(--text-muted)' : 'var(--neon-cyan)'}
+          strokeWidth={2}
+          opacity={isActive ? 0.8 : isPast ? 0.2 : 0.35}
+          strokeLinecap="round"
+        />
+      )}
       {/* Background rect to hide string line */}
       <rect
         x={x - 10}
@@ -303,17 +343,17 @@ function NoteGlyph({ note, x, y, isActive, isPast }: NoteGlyphProps) {
       >
         {text}
       </text>
-      {/* Technique indicator */}
-      {note.technique && (
+      {/* Technique indicator (only shown on topmost note of chord) */}
+      {showTechnique && note.technique && (
         <text
           x={x}
-          y={y - 13}
+          y={y - 14}
           textAnchor="middle"
           fill="var(--neon-pink)"
-          fontSize={9}
+          fontSize={11}
           fontFamily="monospace"
         >
-          {note.technique}
+          {TECHNIQUE_SYMBOL[note.technique] ?? note.technique}
         </text>
       )}
       {/* Accent marker */}

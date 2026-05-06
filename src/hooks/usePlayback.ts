@@ -8,8 +8,9 @@ export function usePlayback() {
   const dispatch = usePlaybackDispatch()
   const getAudioContext = useAudioContext()
   const engineRef = useRef<PlaybackEngine | null>(null)
+  const pausedBeatRef = useRef<number | null>(null)
 
-  const play = useCallback(() => {
+  const startEngine = useCallback((fromBeat?: number) => {
     if (!state.track) return
 
     const ctx = getAudioContext()
@@ -18,37 +19,62 @@ export function usePlayback() {
 
     const engine = new PlaybackEngine(ctx, state.bpm, beatsPerMeasure, totalBeats, {
       onBeat: (beat, measure) => {
+        dispatch({ type: 'SET_COUNT_IN', remaining: null })
         dispatch({ type: 'TICK', beat, measure })
       },
       onEnd: () => {
         dispatch({ type: 'SET_STATUS', status: 'stopped' })
       },
+      onCountIn: (remaining) => {
+        dispatch({ type: 'SET_COUNT_IN', remaining })
+      },
     })
 
     engine.setBpm(state.bpm)
-    // Apply loop if set
     if (state.loopStart !== null && state.loopEnd !== null) {
       engine.setLoop(state.loopStart, state.loopEnd)
     }
     engineRef.current = engine
-    engine.start(1) // 1 bar count-in
+    engine.start(fromBeat !== undefined ? 0 : 1, fromBeat)
     dispatch({ type: 'SET_STATUS', status: 'playing' })
   }, [state.track, state.bpm, state.loopStart, state.loopEnd, getAudioContext, dispatch])
+
+  const play = useCallback(() => {
+    pausedBeatRef.current = null
+    startEngine()
+  }, [startEngine])
 
   const stop = useCallback(() => {
     engineRef.current?.stop()
     engineRef.current = null
+    pausedBeatRef.current = null
     dispatch({ type: 'SET_STATUS', status: 'stopped' })
     dispatch({ type: 'TICK', beat: 0, measure: 0 })
   }, [dispatch])
 
+  const pause = useCallback(() => {
+    if (!engineRef.current) return
+    const beat = engineRef.current.pause()
+    pausedBeatRef.current = beat
+    engineRef.current = null
+    dispatch({ type: 'SET_STATUS', status: 'paused' })
+  }, [dispatch])
+
+  const resume = useCallback(() => {
+    if (pausedBeatRef.current === null) return
+    startEngine(pausedBeatRef.current)
+    pausedBeatRef.current = null
+  }, [startEngine])
+
   const togglePlay = useCallback(() => {
     if (state.status === 'playing') {
-      stop()
+      pause()
+    } else if (state.status === 'paused') {
+      resume()
     } else {
       play()
     }
-  }, [state.status, play, stop])
+  }, [state.status, play, pause, resume])
 
   const setBpm = useCallback((bpm: number) => {
     dispatch({ type: 'SET_BPM', bpm })
@@ -60,5 +86,5 @@ export function usePlayback() {
     engineRef.current?.setLoop(start, end)
   }, [dispatch])
 
-  return { ...state, play, stop, togglePlay, setBpm, setLoop }
+  return { ...state, play, stop, pause, resume, togglePlay, setBpm, setLoop }
 }

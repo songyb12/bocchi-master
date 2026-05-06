@@ -1,8 +1,12 @@
 """
-Bocchi-master Chord Search API Server
+Bocchi-master API Server
 
-Standalone FastAPI server that uses Claude CLI to generate chord progressions.
-Run: uvicorn server.main:app --host 0.0.0.0 --port 8080
+- Chord Search: Claude CLI-based chord progression lookup
+- Tab Parser: Guitar Pro file → BocchiMaster Track JSON
+
+Stem separation + YouTube ingest are delegated to 15_AudioChord (port 8220).
+
+Run: uvicorn main:app --app-dir server --host 0.0.0.0 --port 8081
 """
 
 import json
@@ -10,18 +14,22 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+from tab_parser import parse_gp_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("bocchi.chord_search")
 
-app = FastAPI(title="Bocchi Chord Search", version="1.0.0")
+app = FastAPI(title="Bocchi-master API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,7 +38,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # ── Claude CLI discovery ──
 
@@ -243,3 +250,46 @@ async def search_chords(req: ChordSearchRequest):
         createdAt=now,
         updatedAt=now,
     )
+
+
+# ══════════════════════════════════════════════════════════════
+# Guitar Pro Tab Parser
+# ══════════════════════════════════════════════════════════════
+
+GP_EXTENSIONS = {".gp", ".gp3", ".gp4", ".gp5", ".gpx", ".gp7"}
+
+
+@app.post("/api/parse/tab")
+async def parse_tab(
+    file: UploadFile = File(...),
+    track: str = Query(default=None, description="Track name or index (e.g. 'Bass' or '0')"),
+):
+    """Parse Guitar Pro file → BocchiMaster Track JSON."""
+    suffix = Path(file.filename or "tab.gp5").suffix.lower()
+    if suffix not in GP_EXTENSIONS:
+        raise HTTPException(400, f"Unsupported format: {suffix}. Use: {', '.join(GP_EXTENSIONS)}")
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        # Parse track parameter: try int first, then string
+        target_track = None
+        if track is not None:
+            try:
+                target_track = int(track)
+            except ValueError:
+                target_track = track
+
+        result = parse_gp_file(tmp_path, target_track=target_track)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error("Tab parse failed: %s", e)
+        raise HTTPException(500, f"Parse failed: {e}")
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+    return JSONResponse(content=result)

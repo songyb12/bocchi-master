@@ -1,0 +1,19 @@
+{
+    "name": "DashboardWeb",
+    "display_name": "18_DashboardWeb (TV kiosk SPA)",
+    "description": "Static SPA serve (vite preview) for Chrome kiosk -> HDMI -> TV",
+    "command": "C:\\Program Files\\nodejs\\node.exe",
+    "args": "node_modules\\vite\\bin\\vite.js preview --port 8081 --host 0.0.0.0 --strictPort",
+    "working_directory": "C:\\Claude\\18_DashboardWeb",
+    "health_check": {
+        "url": "http://localhost:8081/",
+        "interval_seconds": 60
+    },
+    "auto_restart": true,
+    "startup_type": "automatic",
+    "log": {
+        "stdout": "C:\\Claude\\18_DashboardWeb\\data\\logs\\service_stdout.log",
+        "stderr": "C:\\Claude\\18_DashboardWeb\\data\\logs\\service_stderr.log"
+    },
+    "dependencies": []
+}

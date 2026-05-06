@@ -12,6 +12,7 @@ const SCHEDULE_INTERVAL = 25 // ms between scheduling checks
 export interface PlaybackCallbacks {
   onBeat: (beat: number, measure: number, time: number) => void
   onEnd: () => void
+  onCountIn?: (remaining: number) => void
 }
 
 export class PlaybackEngine {
@@ -45,12 +46,11 @@ export class PlaybackEngine {
 
   get isPlaying() { return this._isPlaying }
 
-  start(countInBars = 1): void {
+  start(countInBars = 1, fromBeat?: number): void {
     if (this._isPlaying) return
     this._isPlaying = true
-    this.currentBeat = 0
-    // measure is computed from beat
-    this.countInBeats = countInBars * this.beatsPerMeasure
+    this.currentBeat = fromBeat ?? 0
+    this.countInBeats = fromBeat !== undefined ? 0 : countInBars * this.beatsPerMeasure
     this.nextNoteTime = this.audioContext.currentTime + 0.05
 
     this.timerId = window.setInterval(this.scheduler, SCHEDULE_INTERVAL)
@@ -64,7 +64,16 @@ export class PlaybackEngine {
       this.timerId = null
     }
     this.currentBeat = 0
-    // measure is computed from beat
+  }
+
+  pause(): number {
+    const beat = this.currentBeat
+    if (this.timerId !== null) {
+      clearInterval(this.timerId)
+      this.timerId = null
+    }
+    this._isPlaying = false
+    return beat
   }
 
   setBpm(bpm: number): void { this.bpm = bpm }
@@ -78,6 +87,11 @@ export class PlaybackEngine {
     while (this.nextNoteTime < this.audioContext.currentTime + LOOKAHEAD) {
       if (this.countInBeats > 0) {
         this.scheduleClick(this.nextNoteTime, true)
+        const remaining = this.countInBeats
+        const delayMs = Math.max(0, (this.nextNoteTime - this.audioContext.currentTime) * 1000)
+        setTimeout(() => {
+          this.callbacks.onCountIn?.(remaining)
+        }, delayMs)
         this.nextNoteTime += 60.0 / this.bpm
         this.countInBeats--
         continue

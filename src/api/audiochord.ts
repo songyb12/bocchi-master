@@ -28,7 +28,7 @@ const BASE = "/api/v1";
 // admin issues `setx /M AC_API_KEY <value>` on Herta + restarts AudioChord Servy.
 const AC_API_KEY = (import.meta.env.VITE_AC_API_KEY as string | undefined) || "";
 
-function withAuth(headers: HeadersInit = {}): HeadersInit {
+export function withAuth(headers: HeadersInit = {}): HeadersInit {
   if (!AC_API_KEY) return headers;
   return { ...headers, "X-AC-Key": AC_API_KEY };
 }

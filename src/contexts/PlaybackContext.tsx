@@ -13,6 +13,7 @@ interface PlaybackState {
   bpm: number
   loopStart: number | null
   loopEnd: number | null
+  countIn: number | null
 }
 
 type PlaybackAction =
@@ -22,6 +23,7 @@ type PlaybackAction =
   | { type: 'TICK'; beat: number; measure: number }
   | { type: 'SET_BPM'; bpm: number }
   | { type: 'SET_LOOP'; start: number | null; end: number | null }
+  | { type: 'SET_COUNT_IN'; remaining: number | null }
   | { type: 'RESET' }
 
 const initialState: PlaybackState = {
@@ -33,6 +35,7 @@ const initialState: PlaybackState = {
   bpm: 80,
   loopStart: null,
   loopEnd: null,
+  countIn: null,
 }
 
 function playbackReducer(state: PlaybackState, action: PlaybackAction): PlaybackState {
@@ -49,6 +52,8 @@ function playbackReducer(state: PlaybackState, action: PlaybackAction): Playback
       return { ...state, bpm: action.bpm }
     case 'SET_LOOP':
       return { ...state, loopStart: action.start, loopEnd: action.end }
+    case 'SET_COUNT_IN':
+      return { ...state, countIn: action.remaining }
     case 'RESET':
       return { ...initialState }
     default:

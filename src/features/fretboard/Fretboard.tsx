@@ -14,6 +14,13 @@ interface Props {
   activeNotes: NoteEvent[]
   guide?: GuideOverlay
   visibleFrets?: number
+  /**
+   * Bass-learning hint: root note names ("E", "A♯", "F♯", etc.) — every
+   * matching position within `visibleFrets` is dimly marked. Useful when
+   * ChordTimeline pipes the active chord's root, so the player can see all
+   * the playable spots without configuring a full GuideOverlay.
+   */
+  bassRootHints?: string[]
 }
 
 const FRET_COUNT = 15
@@ -22,7 +29,7 @@ const MARGIN_LEFT = 40
 const MARGIN_TOP = 25
 const NUT_WIDTH = 6
 
-export function Fretboard({ tuning, activeNotes, guide, visibleFrets = FRET_COUNT }: Props) {
+export function Fretboard({ tuning, activeNotes, guide, visibleFrets = FRET_COUNT, bassRootHints }: Props) {
   const stringCount = tuning.stringCount
   const svgHeight = MARGIN_TOP + (stringCount - 1) * STRING_SPACING + 30
   const svgWidth = 800
@@ -136,8 +143,36 @@ export function Fretboard({ tuning, activeNotes, guide, visibleFrets = FRET_COUN
         </text>
       ))}
 
+      {/* Bass root hints (R5) — every fret position whose pitch class matches */}
+      {bassRootHints && bassRootHints.length > 0 && Array.from({ length: stringCount }, (_, sIdx) => {
+        const openMidi = tuning.tuning[sIdx].midiNumber
+        const targets = bassRootHints
+          .map(h => h.replace(/♯/g, '#').replace(/♭/g, 'b'))
+        const matches: number[] = []
+        for (let f = 0; f <= visibleFrets; f++) {
+          const noteName = CHROMATIC_SCALE[(openMidi + f) % 12]
+          if (targets.includes(noteName)) matches.push(f)
+        }
+        return matches.map(f => (
+          <circle
+            key={`bass-hint-${sIdx}-${f}`}
+            cx={fretMidX(f)}
+            cy={stringY(sIdx)}
+            r={6}
+            fill="none"
+            stroke="#7eff8b"
+            strokeWidth={1.2}
+            opacity={0.55}
+            strokeDasharray="2,2"
+          />
+        ))
+      })}
+
       {/* Guide overlay (scale/chord positions) */}
-      {guide?.positions?.map((pos, i) => {
+      {guide?.positions?.filter(pos =>
+        pos.fret >= 0 && pos.fret <= visibleFrets &&
+        pos.string >= 0 && pos.string < stringCount
+      ).map((pos, i) => {
         const midi = tuning.tuning[pos.string].midiNumber + pos.fret
         const noteName = CHROMATIC_SCALE[midi % 12]
         const isRoot = guide.rootNote === noteName
@@ -170,7 +205,10 @@ export function Fretboard({ tuning, activeNotes, guide, visibleFrets = FRET_COUN
       })}
 
       {/* Active notes */}
-      {activeNotes.map(note => (
+      {activeNotes.filter(note =>
+        Number.isFinite(note.fret) && note.fret >= 0 && note.fret <= visibleFrets &&
+        Number.isFinite(note.string) && note.string >= 0 && note.string < stringCount
+      ).map(note => (
         <g key={`active-${note.id}`} filter="url(#fret-glow)">
           <circle
             cx={fretMidX(note.fret)}

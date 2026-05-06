@@ -110,7 +110,7 @@ export function TabView() {
             track={track}
             currentBeat={currentBeat}
             currentMeasure={currentMeasure}
-            isPlaying={status === 'playing'}
+            isPlaying={status !== 'stopped'}
             loopStart={loopStart}
             loopEnd={loopEnd}
             onMeasureClick={handleMeasureClick}
@@ -119,7 +119,7 @@ export function TabView() {
           <AModeRenderer
             track={track}
             currentBeat={currentBeat}
-            isPlaying={status === 'playing'}
+            isPlaying={status !== 'stopped'}
           />
         )}
       </div>
