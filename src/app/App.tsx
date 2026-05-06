@@ -7,6 +7,7 @@ import { AudioInputPanel } from '@/features/audio-input/AudioInputPanel'
 import { CurriculumScreen } from '@/features/curriculum/CurriculumScreen'
 import { SongsView } from '@/features/songs/SongsView'
 import { LearnView } from '@/features/learn/LearnView'
+import { SessionView } from '@/features/session/SessionView'
 import { ComboDisplay } from '@/features/tab-view/shared/ComboDisplay'
 import { SessionResults } from '@/features/tab-view/shared/SessionResults'
 import { HitFeedbackOverlay, useHitFeedback } from '@/features/tab-view/shared/HitFeedback'
@@ -18,7 +19,7 @@ import { useScoring } from '@/hooks/useScoring'
 import type { Drill, Lesson } from '@/data/curriculum'
 import { AppRail } from './AppRail'
 
-type View = 'play' | 'songs' | 'curriculum' | 'learn' | 'results'
+type View = 'play' | 'songs' | 'curriculum' | 'learn' | 'session' | 'results'
 
 function AppContent() {
   const { track, currentBeat, status, bpm, mode } = usePlaybackState()
@@ -144,6 +145,8 @@ function AppContent() {
           <SongsView />
         ) : view === 'learn' ? (
           <LearnView />
+        ) : view === 'session' ? (
+          <SessionView />
         ) : view === 'curriculum' ? (
           <CurriculumScreen onSelectDrill={handleDrillSelect} />
         ) : (

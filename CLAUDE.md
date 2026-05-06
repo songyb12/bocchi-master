@@ -58,6 +58,11 @@ Extracted from UFS Master Core Ecosystem (`D:\Claude\01_UFS\frontend\bocchi-mast
 71 commits of history available in the original repo.
 
 ## Current Status
+- **2026-05-06 (후속)**: **Session 하네스 신규 — 30분 evidence-based 연습 블록**. 사용자 요청 "학습법/베이스 학습 리서치 + 세션 하네스 구축". 웹 리서치 (Learning Scientists / Berklee / TalkingBass / 어썸뮤직 등) → 학습 과학 6원칙 (deliberate practice / spaced repetition / interleaving / retrieval / metacognition / chunking) + 베이스 학습 6우선순위 (매일 짧게 / 스케일→코드톤→곡 / 12-key 회전 / 메트로놈 / 녹음 / solid foundation). 종합해 5블록 세션 하네스 구축.
+  - **`src/features/session/sessionEngine.ts`** (~210L): SessionPlan/Block 타입 + `buildSessionPlan(settings)` (5블록: warmup 17% / stage 23% / song 33% / retrieval 17% / metacog 10%) + localStorage `bocchi.session.{log,settings}` (streak / 누적 분 / per-kind dwell / 60 entries 캡 / 1일차 streak +1 자동 계산) + `recordSession(plan, doneBlocks)`로 영속. Settings: stage(R1 연결) / primarySong / altSong (interleaving partner) / totalMinutes 15-60 슬라이더.
+  - **`src/features/session/SessionView.tsx`** (~360L): 좌측 레일 5번째 (시계 아이콘) → "Today's Practice" + STREAK/TOTAL/TODAY stats + ⚙ Tune 드로어 (stage/songs/duration). 5블록 카드 (icon + 번호 + KIND_LABEL amber + serif italic title + 분 + Mark/Done 토글 + ≈ principle + ▸ steps). Save Session → recordSession + UI 즉시 반영 (블록 녹색 전환 + STREAK +1 + TOTAL/TODAY 갱신). ByKindStats(누적 분 막대) + RecentEntries(최근 7일) + PRINCIPLES legend 푸터.
+  - **AppRail.tsx + App.tsx wiring**: 'session' view 추가, 5번째 레일 아이콘.
+  - **빌드/검증**: 빌드 클린 (517KB JS / 154KB gzip, react-markdown 영향 +11KB). Playwright 1440x900 — 5블록 모두 렌더 + 5 Mark 일괄 클릭 + Save 클릭 → STREAK 0→1, TOTAL 30min, 모든 블록 ✓ Done 녹색 전환 정상. 콘솔 에러 favicon 외 0. localStorage 영속 확인.
 - **2026-05-06**: **베이스 중심 자가개선 라운드 (R1~R19, 14건 commit, 6건 skip)**. 사용자 "자가개선 20회 진행, 베이스 중심" 요청에 자율 진행.
   - **R1 StagesPanel 패턴 그리드** (`stages.ts`/`StagesPanel.tsx`): 6 Stage 각각에 `examplePattern`(chord+4-beat×4-string grid+note) 추가. Help 패널에서 베이스 4현 grid 시각화 (G/D/A/E top-down, fret 숫자 amber dot).
   - **R2 ChordTimeline root note** (`ChordTimeline.tsx`): `extractRoot(label)` 헬퍼. 모든 chord 셀(measures + continuous)에 amber-green `♭ A♯` root pill 표시 — Stage 1 학습자가 코드 → 베이스 root 즉시 매핑 가능.

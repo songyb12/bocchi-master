@@ -3,7 +3,7 @@
 // Active item: amber fill + glow. Bottom: vertical BocchiMaster wordmark.
 
 interface RailItem {
-  id: 'songs' | 'play' | 'curriculum' | 'learn'
+  id: 'songs' | 'play' | 'curriculum' | 'learn' | 'session'
   label: string
   icon: string // SVG path data
 }
@@ -13,11 +13,12 @@ const ITEMS: RailItem[] = [
   { id: 'play',       label: 'Drills',     icon: 'M5 3v18l15-9L5 3Z' },
   { id: 'curriculum', label: 'Curriculum', icon: 'M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4V4Zm0 0v16m0-12h16' },
   { id: 'learn',      label: 'Learn',      icon: 'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' },
+  { id: 'session',    label: 'Session',    icon: 'M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z' },
 ]
 
 interface Props {
-  active: 'songs' | 'play' | 'curriculum' | 'learn' | 'results'
-  onSelect: (id: 'songs' | 'play' | 'curriculum' | 'learn') => void
+  active: 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'results'
+  onSelect: (id: 'songs' | 'play' | 'curriculum' | 'learn' | 'session') => void
 }
 
 export function AppRail({ active, onSelect }: Props) {
