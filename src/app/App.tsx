@@ -20,6 +20,7 @@ import { useAudioInput } from '@/hooks/useAudioInput'
 import { useScoring } from '@/hooks/useScoring'
 import type { Drill, Lesson } from '@/data/curriculum'
 import { AppRail } from './AppRail'
+import { BackToDashboard } from './BackToDashboard'
 
 type View = 'play' | 'songs' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine' | 'results'
 
@@ -126,6 +127,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen flex" style={{ background: '#0a0a0a' }}>
+      <BackToDashboard />
       <AppRail
         active={view}
         onSelect={(id) => { setView(id); if (id !== 'play') scoring.reset() }}

@@ -1,12 +1,12 @@
 {
     "name": "BocchiMaster",
     "display_name": "14_BocchiMaster Guitar Practice Studio",
-    "description": "Guitar & Bass practice web app (React SPA)",
+    "description": "Guitar & Bass practice SPA (vite preview, port 3001)",
     "command": "C:\\nvm4w\\nodejs\\node.exe",
-    "args": "node_modules/vite/bin/vite.js preview --port 3001 --host 0.0.0.0",
+    "args": "node_modules/vite/bin/vite.js preview --port 3001 --host 0.0.0.0 --strictPort",
     "working_directory": "C:\\Claude\\14_BocchiMaster",
     "health_check": {
-        "url": "http://localhost:3001",
+        "url": "http://localhost:3001/",
         "interval_seconds": 60
     },
     "auto_restart": true,
