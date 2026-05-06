@@ -3,7 +3,7 @@
 // Active item: amber fill + glow. Bottom: vertical BocchiMaster wordmark.
 
 interface RailItem {
-  id: 'songs' | 'play' | 'curriculum' | 'learn' | 'session'
+  id: 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine'
   label: string
   icon: string // SVG path data
 }
@@ -14,11 +14,13 @@ const ITEMS: RailItem[] = [
   { id: 'curriculum', label: 'Curriculum', icon: 'M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4V4Zm0 0v16m0-12h16' },
   { id: 'learn',      label: 'Learn',      icon: 'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' },
   { id: 'session',    label: 'Session',    icon: 'M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z' },
+  { id: 'vocal',      label: 'Vocal',      icon: 'M12 1a4 4 0 0 1 4 4v8a4 4 0 1 1-8 0V5a4 4 0 0 1 4-4ZM5 11v2a7 7 0 0 0 14 0v-2M12 19v4M8 23h8' },
+  { id: 'routine',    label: 'Routine',    icon: 'M9 11l3 3l8-8M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11' },
 ]
 
 interface Props {
-  active: 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'results'
-  onSelect: (id: 'songs' | 'play' | 'curriculum' | 'learn' | 'session') => void
+  active: 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine' | 'results'
+  onSelect: (id: 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine') => void
 }
 
 export function AppRail({ active, onSelect }: Props) {

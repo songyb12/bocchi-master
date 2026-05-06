@@ -58,6 +58,20 @@ Extracted from UFS Master Core Ecosystem (`D:\Claude\01_UFS\frontend\bocchi-mast
 71 commits of history available in the original repo.
 
 ## Current Status
+- **2026-05-06 (후속2)**: **Vocal + Routine 탭 신규 (탭 5→7)**. 사용자 요청 "보컬 잘하는 방법 + 각 악기별 루틴 페이지". 웹 리서치 (Musicians Institute / Forbrain / School of Rock / Soundbrenner / TalkingBass / JustinGuitar 등) → 보컬 evidence-based 8섹션 + 4 악기 일일 루틴.
+  - **Vocal 탭** (`src/features/vocal/`) — 좌측 레일 6번째 (마이크 아이콘). `VocalView.tsx` (~330L) 8 섹션: 호흡 / 워밍업 / 음역대 / 발성 / 자세 / 톤 / 관리 / 자기 평가. 시각화 3종:
+    - `BreathingDiagram.tsx` — Chest vs Diaphragm 토글, 인체 SVG (배 / 가슴 영역 + 횡격막 라인 애니메이션)
+    - `VocalRangeMap.tsx` — Chest/Mix/Head/Falsetto 4 영역 + passaggio (E4, A4) 마커 + log scale C2-C6 axis
+    - `WarmupExercises.tsx` — 5종 운동 카드 (Lip trill / Siren / Straw / Humming / Vowel scales) + 14분 루틴 권장
+    - 추가: 모음 5종(AH/EH/EE/OH/OO) 입 모양 카드, 자세 4팁, 장르 5종 톤 매핑, 일상 관리 6종, 자기 평가 5단계
+  - **Routine 탭** (`src/features/routine/RoutineView.tsx` ~360L) — 좌측 레일 7번째 (체크리스트 아이콘). 4 악기 토글 (Bass 45min / Guitar 60min / Vocal 30min / Drum 45min). 각 악기당:
+    - Description + Time-split 막대 (5블록 색깔 비율)
+    - 5 블록 카드 (Warmup → 핵심 → 곡 → Cooldown)
+    - Weekly Focus 7일 (Mon-Sun)
+    - Sources
+  - **AppRail + App.tsx wiring**: 'vocal' / 'routine' view 추가. 좌측 레일 7개 아이콘.
+  - **빌드/검증**: 빌드 클린 (568KB JS / 172KB gzip, react-markdown 영향 + 신규). Playwright 1440x900 — Vocal 탭 호흡 다이어그램 토글(Diaphragm green) 정상, Routine 탭 4 악기 + Bass 5블록 + Weekly 7일 모두 렌더, 콘솔 에러 favicon 외 0.
+  - **NotebookLM**: get_health 결과 authenticated=false (사용자 직접 setup_auth 필요) → 본 세션이 직접 작성. URL 발급 시 source 추가 가능 — 별 작업.
 - **2026-05-06 (후속)**: **Session 하네스 신규 — 30분 evidence-based 연습 블록**. 사용자 요청 "학습법/베이스 학습 리서치 + 세션 하네스 구축". 웹 리서치 (Learning Scientists / Berklee / TalkingBass / 어썸뮤직 등) → 학습 과학 6원칙 (deliberate practice / spaced repetition / interleaving / retrieval / metacognition / chunking) + 베이스 학습 6우선순위 (매일 짧게 / 스케일→코드톤→곡 / 12-key 회전 / 메트로놈 / 녹음 / solid foundation). 종합해 5블록 세션 하네스 구축.
   - **`src/features/session/sessionEngine.ts`** (~210L): SessionPlan/Block 타입 + `buildSessionPlan(settings)` (5블록: warmup 17% / stage 23% / song 33% / retrieval 17% / metacog 10%) + localStorage `bocchi.session.{log,settings}` (streak / 누적 분 / per-kind dwell / 60 entries 캡 / 1일차 streak +1 자동 계산) + `recordSession(plan, doneBlocks)`로 영속. Settings: stage(R1 연결) / primarySong / altSong (interleaving partner) / totalMinutes 15-60 슬라이더.
   - **`src/features/session/SessionView.tsx`** (~360L): 좌측 레일 5번째 (시계 아이콘) → "Today's Practice" + STREAK/TOTAL/TODAY stats + ⚙ Tune 드로어 (stage/songs/duration). 5블록 카드 (icon + 번호 + KIND_LABEL amber + serif italic title + 분 + Mark/Done 토글 + ≈ principle + ▸ steps). Save Session → recordSession + UI 즉시 반영 (블록 녹색 전환 + STREAK +1 + TOTAL/TODAY 갱신). ByKindStats(누적 분 막대) + RecentEntries(최근 7일) + PRINCIPLES legend 푸터.
