@@ -28,10 +28,7 @@ Thumbs.db
 .playwright-mcp/
 
 # Screenshot artifacts (written to repo root by Playwright captures)
-/learn-*.png
-/bocchi-*.png
-/dashweb-*.png
-/chord-*.png
+/*.png
 server/.venv/
 src/core/note/*.bak
 scripts/extracted_tabs*/
