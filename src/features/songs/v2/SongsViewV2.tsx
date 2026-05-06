@@ -16,7 +16,7 @@
  *     Left (~30%): song list grouped by category
  *     Right (~70%): YouTube → sync bar → TabView → Fretboard → StemSeparator
  */
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { usePlaybackState, usePlaybackDispatch } from '@/contexts/PlaybackContext'
 import { TabView } from '@/features/tab-view/TabView'
 import { Fretboard } from '@/features/fretboard/Fretboard'
@@ -119,6 +119,34 @@ export function SongsViewV2() {
   const [offsetSec, setOffsetSec] = useState(0)
   const [stageMode, setStageMode] = useState(false)
   const [activeChordRoot, setActiveChordRoot] = useState<string | null>(null)
+  const [showTab, setShowTab] = useState(true)
+
+  // Per-song offset persistence — sync drift differs per video upload
+  const offsetKey = selectedSong?.youtubeId ? `bocchi.offset.${selectedSong.youtubeId}` : null
+  useEffect(() => {
+    if (!offsetKey) return
+    try {
+      const raw = localStorage.getItem(offsetKey)
+      if (raw != null) {
+        const v = parseFloat(raw)
+        if (Number.isFinite(v)) setOffsetSec(v)
+        else setOffsetSec(0)
+      } else {
+        setOffsetSec(0)
+      }
+    } catch { setOffsetSec(0) }
+  }, [offsetKey])
+
+  useEffect(() => {
+    if (!offsetKey) return
+    try { localStorage.setItem(offsetKey, String(offsetSec)) } catch { /* */ }
+  }, [offsetKey, offsetSec])
+
+  // Auto-collapse tab when current track has no events (chord-only practice)
+  const trackHasEvents = (track?.events.length ?? 0) > 0
+  useEffect(() => {
+    setShowTab(trackHasEvents)
+  }, [trackHasEvents, selectedSong?.youtubeId])
 
   const ytContainerRef = useRef<HTMLDivElement>(null)
 
@@ -590,8 +618,8 @@ export function SongsViewV2() {
           {selectedSong && (
             <ChordTimeline
               youtubeId={selectedSong.youtubeId ?? null}
-              currentTime={ytTime}
-              onSeek={ytSeek}
+              currentTime={Math.max(0, ytTime - offsetSec)}
+              onSeek={(audioSec) => ytSeek(audioSec + offsetSec)}
               bpm={selectedSong.bpm}
               timeSignature={track?.timeSignature ?? [4, 4]}
               onActiveRootChange={setActiveChordRoot}
@@ -601,19 +629,45 @@ export function SongsViewV2() {
           {/* ── TabView card ───────────────────────────────────────────────────── */}
           {track && (
             <>
-              <div
-                className="rounded-2xl overflow-hidden"
-                style={{
-                  background: C.surface,
-                  boxShadow: C.inset,
-                  padding: '4px',
-                }}
-              >
-                <div className="relative">
-                  <TabView />
-                  <CountInOverlay />
+              {/* TabView toggle — auto-hidden when track has no events,
+                  user can force-show via the small toggle. */}
+              <div className="flex items-center justify-between gap-3">
+                <div
+                  className="font-mono text-[10px]"
+                  style={{ color: trackHasEvents ? '#7eff8b' : '#666', letterSpacing: '0.1em' }}
+                >
+                  {trackHasEvents
+                    ? `TAB · ${track.events.length} events`
+                    : 'TAB · empty (chord-timeline 학습 권장)'}
                 </div>
+                <button
+                  onClick={() => setShowTab((v) => !v)}
+                  className="px-2 py-1 rounded font-mono text-[10px] transition-all"
+                  style={{
+                    background: showTab ? 'rgba(251,188,0,0.15)' : '#181818',
+                    color: showTab ? '#fbbc00' : '#888',
+                    border: `1px solid ${showTab ? 'rgba(251,188,0,0.4)' : '#333'}`,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {showTab ? '▼ TAB hide' : '▸ TAB show'}
+                </button>
               </div>
+              {showTab && (
+                <div
+                  className="rounded-2xl overflow-hidden"
+                  style={{
+                    background: C.surface,
+                    boxShadow: C.inset,
+                    padding: '4px',
+                  }}
+                >
+                  <div className="relative">
+                    <TabView />
+                    <CountInOverlay />
+                  </div>
+                </div>
+              )}
 
               {/* ── Fretboard card ─────────────────────────────────────────────── */}
               <div
