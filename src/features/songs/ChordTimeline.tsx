@@ -12,7 +12,7 @@
  * Active cell (based on `currentTime`) is highlighted; auto-scrolls into view.
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { withAuth } from '@/api/audiochord'
+import { withAuth } from '@/lib/audiochord'
 import {
   type ChordSegment,
   type MeasureCell,

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { withAuth } from '@/api/audiochord'
+import { withAuth } from '@/lib/audiochord'
 
 const API_BASE = '/api/v1'
 const STEM_ORDER = ['bass', 'drums', 'vocals', 'other'] as const
