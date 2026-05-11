@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "gen:audiochord-types": "openapi-typescript https://raw.githubusercontent.com/songyb12/audio-chord/master/spec/openapi.json -o src/lib/audiochord.types.ts",
+    "gen:audiochord-types": "openapi-typescript http://100.111.55.55:8220/openapi.json -o src/lib/audiochord.types.ts",
     "gen:audiochord-types:local": "openapi-typescript http://localhost:8220/openapi.json -o src/lib/audiochord.types.ts"
   },
   "dependencies": {
