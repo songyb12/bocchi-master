@@ -178,7 +178,50 @@ export function recordSession(plan: SessionPlan, doneBlocks: BlockKind[]): Sessi
     entries: entries.slice(0, 60),
   }
   writeLog(newLog)
+
+  // Awarded XP to the bass Curriculum (Session is bass-centric).
+  // 1 min of completed practice → 1 XP. Same date re-saves the delta so
+  // adding blocks later only credits new minutes.
+  awardCurriculumXP('bass', date, minutesDone)
   return newLog
+}
+
+// ─── Curriculum XP integration ────────────────────────────────────────────
+
+const PROGRESS_KEY_PREFIX = 'bocchi.progress.'
+
+interface ProgressSnapshot {
+  xp: number
+  completedLessons: string[]
+  completedDrills: string[]
+  // Internal: per-date awarded XP so re-saving the same day's session
+  // only credits the delta, not double-counts.
+  sessionXpByDate?: Record<string, number>
+}
+
+function awardCurriculumXP(instrument: 'bass' | 'guitar', date: string, minutesDone: number): void {
+  if (typeof window === 'undefined') return
+  const key = PROGRESS_KEY_PREFIX + instrument
+  try {
+    const raw = localStorage.getItem(key)
+    const p: ProgressSnapshot = raw ? JSON.parse(raw) : { xp: 0, completedLessons: [], completedDrills: [] }
+    p.xp = typeof p.xp === 'number' ? p.xp : 0
+    p.completedLessons = Array.isArray(p.completedLessons) ? p.completedLessons : []
+    p.completedDrills = Array.isArray(p.completedDrills) ? p.completedDrills : []
+    p.sessionXpByDate = (p.sessionXpByDate && typeof p.sessionXpByDate === 'object') ? p.sessionXpByDate : {}
+
+    const previouslyAwarded = p.sessionXpByDate[date] ?? 0
+    const delta = minutesDone - previouslyAwarded
+    if (delta > 0) {
+      p.xp += delta
+      p.sessionXpByDate[date] = minutesDone
+      localStorage.setItem(key, JSON.stringify(p))
+    } else if (delta < 0) {
+      // Shouldn't happen (Save Session is additive), but stay defensive.
+      p.sessionXpByDate[date] = minutesDone
+      localStorage.setItem(key, JSON.stringify(p))
+    }
+  } catch { /* localStorage unavailable */ }
 }
 
 // ─── Plan builder ─────────────────────────────────────────────────────────
