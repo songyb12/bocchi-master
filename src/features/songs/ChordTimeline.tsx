@@ -266,6 +266,26 @@ export function ChordTimeline({
     return chords.slice(lo, hi + 1)
   }, [chords])
 
+  // Chord distribution — time-weighted top labels for the header strip.
+  // Helps learners spot which chord they spend most time on.
+  const chordStats = useMemo(() => {
+    if (chords.length === 0) return { top: [] as Array<{ label: string; sec: number; pct: number }>, total: 0 }
+    const totals = new Map<string, number>()
+    let grandTotal = 0
+    for (const c of chords) {
+      if (c.label === 'N' || c.label === 'X') continue
+      const dur = Math.max(0, c.end - c.start)
+      totals.set(c.label, (totals.get(c.label) ?? 0) + dur)
+      grandTotal += dur
+    }
+    if (grandTotal === 0) return { top: [], total: 0 }
+    const top = [...totals.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([label, sec]) => ({ label, sec, pct: (sec / grandTotal) * 100 }))
+    return { top, total: grandTotal }
+  }, [chords])
+
   // Reset auto-scroll memory on mode switch
   useEffect(() => { activeIdxRef.current = -1 }, [mode])
 
@@ -285,7 +305,7 @@ export function ChordTimeline({
         padding: '12px 16px',
       }}
     >
-      <div className="flex items-center gap-3 mb-2">
+      <div className="flex items-center gap-3 mb-2 flex-wrap">
         <span className="text-xs font-mono font-bold" style={{ color: C.amber }}>
           ♪ Chord Track
         </span>
@@ -293,6 +313,29 @@ export function ChordTimeline({
           AudioChord (Crema) · {chords.length} segments
           {mode === 'measures' && visibleMeasures.length > 0 && ` · ${visibleMeasures.length} measures @ ${bpm}bpm`}
         </span>
+        {chordStats.top.length > 0 && (
+          <div
+            className="flex items-center gap-1.5 font-mono text-[10px]"
+            style={{ color: C.textSec }}
+            title={`Top chord coverage (time-weighted) · total ${chordStats.total.toFixed(1)}s`}
+          >
+            <span style={{ color: C.textMut }}>TOP</span>
+            {chordStats.top.map((s, i) => (
+              <span
+                key={s.label}
+                className="px-1.5 py-0.5 rounded"
+                style={{
+                  background: i === 0 ? 'rgba(251,188,0,0.15)' : '#1a1a1a',
+                  color: i === 0 ? C.amber : C.textSec,
+                  border: `1px solid ${i === 0 ? 'rgba(251,188,0,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                  fontWeight: 600,
+                }}
+              >
+                {normalizeLabel(s.label)} {s.pct.toFixed(0)}%
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex-1" />
         {phase === 'ready' && canQuantize && (
           <div className="flex items-center rounded overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
