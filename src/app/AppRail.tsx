@@ -1,14 +1,15 @@
-// AppRail — thin left icon rail (kiosk-style nav).
+﻿// AppRail — thin left icon rail (kiosk-style nav).
 // Replaces the old top Play/Songs/Curriculum header.
 // Active item: amber fill + glow. Bottom: vertical BocchiMaster wordmark.
 
 interface RailItem {
-  id: 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine'
+  id: 'home' | 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine'
   label: string
   icon: string // SVG path data
 }
 
 const ITEMS: RailItem[] = [
+  { id: 'home',       label: 'Home',       icon: 'M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V10.5Z' },
   { id: 'songs',      label: 'Practice',   icon: 'M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z' },
   { id: 'play',       label: 'Drills',     icon: 'M5 3v18l15-9L5 3Z' },
   { id: 'curriculum', label: 'Curriculum', icon: 'M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4V4Zm0 0v16m0-12h16' },
@@ -19,8 +20,8 @@ const ITEMS: RailItem[] = [
 ]
 
 interface Props {
-  active: 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine' | 'results'
-  onSelect: (id: 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine') => void
+  active: 'home' | 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine' | 'results'
+  onSelect: (id: 'home' | 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine') => void
 }
 
 export function AppRail({ active, onSelect }: Props) {
@@ -84,3 +85,4 @@ export function AppRail({ active, onSelect }: Props) {
     </nav>
   )
 }
+

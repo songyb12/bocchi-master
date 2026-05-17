@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PlaybackProvider, usePlaybackState, usePlaybackDispatch } from '@/contexts/PlaybackContext'
 import { AudioContextProvider } from '@/core/audio/AudioContextProvider'
 import { TabView } from '@/features/tab-view/TabView'
@@ -21,8 +21,9 @@ import { useScoring } from '@/hooks/useScoring'
 import type { Drill, Lesson } from '@/data/curriculum'
 import { AppRail } from './AppRail'
 import { BackToDashboard } from './BackToDashboard'
+import { PracticeHome } from './PracticeHome'
 
-type View = 'play' | 'songs' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine' | 'results'
+type View = 'home' | 'play' | 'songs' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine' | 'results'
 
 function AppContent() {
   const { track, currentBeat, status, bpm, mode } = usePlaybackState()
@@ -31,7 +32,7 @@ function AppContent() {
   const { isListening, pitch } = useAudioInput()
   const scoring = useScoring(track)
   const { items: feedbackItems, showFeedback } = useHitFeedback()
-  const [view, setView] = useState<View>('songs')
+  const [view, setView] = useState<View>('home')
   const [instrument] = useState<'guitar' | 'bass'>('guitar')
   const [openCategory, setOpenCategory] = useState<string | null>(null)
 
@@ -145,6 +146,11 @@ function AppContent() {
             onRetry={handleRetry}
             onClose={handleCloseResults}
           />
+        ) : view === 'home' ? (
+          <PracticeHome
+            onQuickStart={() => selectTrack(DEMO_TRACKS[0]?.id ?? '')}
+            onOpen={(next) => setView(next)}
+          />
         ) : view === 'songs' ? (
           <SongsView />
         ) : view === 'learn' ? (
@@ -252,3 +258,4 @@ export function App() {
     </AudioContextProvider>
   )
 }
+
