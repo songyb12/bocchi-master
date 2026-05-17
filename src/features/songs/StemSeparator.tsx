@@ -177,18 +177,32 @@ function StemMixer({ stems }: MixerProps) {
     })
   }, [muted, soloed, volume])
 
-  // Periodic drift correction — slave non-master stems to master.currentTime
+  // Periodic drift correction — slave non-master stems to master.currentTime.
+  // Dual threshold: small drift uses gentle playbackRate nudge (no audible
+  // click), large drift hard-snaps. Tighter loop than v1 (150 ms vs 250 ms).
   useEffect(() => {
     if (!playing) return
+    const SOFT_S = 0.04   // 40 ms — start rate nudge
+    const HARD_S = 0.15   // 150 ms — hard snap
     const id = setInterval(() => {
       const master = refs.current[masterKey]
       if (!master) return
       const t = master.currentTime
       Object.entries(refs.current).forEach(([key, el]) => {
         if (!el || key === masterKey) return
-        if (Math.abs(el.currentTime - t) > 0.08) el.currentTime = t
+        const diff = el.currentTime - t  // positive = ahead
+        const absDiff = Math.abs(diff)
+        if (absDiff > HARD_S) {
+          el.currentTime = t
+          if (el.playbackRate !== 1) el.playbackRate = 1
+        } else if (absDiff > SOFT_S) {
+          // Slight nudge — gentle catch-up without audible click
+          el.playbackRate = diff > 0 ? 0.98 : 1.02
+        } else if (el.playbackRate !== 1) {
+          el.playbackRate = 1
+        }
       })
-    }, 250)
+    }, 150)
     return () => clearInterval(id)
   }, [playing, masterKey])
 
