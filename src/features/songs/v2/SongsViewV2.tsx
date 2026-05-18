@@ -54,11 +54,35 @@ const C = {
   inset:     'inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.3)',
 } as const
 
+const RECENT_SONGS_KEY = 'bocchi.songs.recent'
+const MAX_RECENT_SONGS = 5
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatTime(s: number) {
   const m = Math.floor(s / 60)
   const sec = Math.floor(s % 60)
   return `${m}:${sec.toString().padStart(2, '0')}`
+}
+
+function songKey(song: SongEntry): string {
+  return `${song.artist}::${song.title}`
+}
+
+function loadRecentSongKeys(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RECENT_SONGS_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function saveRecentSong(song: SongEntry): string[] {
+  const next = [songKey(song), ...loadRecentSongKeys().filter(key => key !== songKey(song))]
+    .slice(0, MAX_RECENT_SONGS)
+  try { localStorage.setItem(RECENT_SONGS_KEY, JSON.stringify(next)) } catch { /* */ }
+  return next
 }
 
 // ── Subcomponents ─────────────────────────────────────────────────────────────
@@ -126,6 +150,7 @@ export function SongsViewV2() {
   const [stageMode, setStageMode] = useState(false)
   const [activeChordRoot, setActiveChordRoot] = useState<string | null>(null)
   const [showTab, setShowTab] = useState(true)
+  const [recentSongKeys, setRecentSongKeys] = useState<string[]>(() => loadRecentSongKeys())
 
   // Per-song offset persistence — sync drift differs per video upload
   const offsetKey = selectedSong?.youtubeId ? `bocchi.offset.${selectedSong.youtubeId}` : null
@@ -162,6 +187,27 @@ export function SongsViewV2() {
   syncRef.current = { enabled: syncEnabled, offset: offsetSec, bpm, track }
 
   const allTracks = useMemo(() => SONG_CATEGORIES.flatMap(c => c.tracks), [])
+  const allSongs = useMemo(() => SONG_CATEGORIES.flatMap(c => c.songs), [])
+  const trackById = useMemo(() => new Map(allTracks.map(t => [t.id, t])), [allTracks])
+
+  const recentSongs = useMemo(
+    () => recentSongKeys
+      .map(key => allSongs.find(song => songKey(song) === key))
+      .filter((song): song is SongEntry => !!song),
+    [allSongs, recentSongKeys],
+  )
+
+  const bassReadySongs = useMemo(
+    () => allSongs
+      .filter(song => (trackById.get(song.bassTrackId)?.events.length ?? 0) > 0)
+      .slice(0, 6),
+    [allSongs, trackById],
+  )
+
+  const getSongTrack = useCallback((song: SongEntry, inst = instrument) => {
+    const trackId = inst === 'bass' ? song.bassTrackId : song.guitarTrackId
+    return trackById.get(trackId) ?? null
+  }, [instrument, trackById])
 
   useEffect(() => {
     if (handoffConsumedRef.current) return
@@ -215,23 +261,22 @@ export function SongsViewV2() {
   const handleSongSelect = useCallback((song: SongEntry) => {
     setImportedPractice(null)
     setSelectedSong(song)
+    setRecentSongKeys(saveRecentSong(song))
     setSyncEnabled(true)
     setOffsetSec(0)
     dispatch({ type: 'SET_STATUS', status: 'stopped' })
     dispatch({ type: 'TICK', beat: 0, measure: 0 })
-    const trackId = instrument === 'bass' ? song.bassTrackId : song.guitarTrackId
-    const t = allTracks.find(tr => tr.id === trackId)
+    const t = getSongTrack(song)
     if (t) dispatch({ type: 'SET_TRACK', track: t })
-  }, [instrument, allTracks, dispatch])
+  }, [dispatch, getSongTrack])
 
   const handleInstrumentToggle = useCallback((inst: 'guitar' | 'bass') => {
     setInstrument(inst)
     if (selectedSong) {
-      const trackId = inst === 'bass' ? selectedSong.bassTrackId : selectedSong.guitarTrackId
-      const t = allTracks.find(tr => tr.id === trackId)
+      const t = getSongTrack(selectedSong, inst)
       if (t) dispatch({ type: 'SET_TRACK', track: t })
     }
-  }, [selectedSong, allTracks, dispatch])
+  }, [selectedSong, dispatch, getSongTrack])
 
   const activeNotes = track && status !== 'stopped'
     ? track.events.filter(e => currentBeat >= e.time && currentBeat < e.time + e.duration)
@@ -252,6 +297,100 @@ export function SongsViewV2() {
     }
     ytSeek(audioSec + offsetSec)
   }, [dispatch, importedPractice, offsetSec, practiceBpm, ytSeek])
+
+  const renderSongRow = (song: SongEntry, variant: 'default' | 'recent' | 'ready' = 'default') => {
+    const isActive = selectedSong?.title === song.title
+    const practiceTrack = getSongTrack(song)
+    const hasPlayableTab = (practiceTrack?.events.length ?? 0) > 0
+    const badge = hasPlayableTab ? 'BASS TAB' : 'ROOTS'
+    const rowAccent = variant === 'recent' ? C.green : variant === 'ready' ? C.rose : C.amber
+
+    return (
+      <button
+        key={`${variant}-${songKey(song)}`}
+        onClick={() => handleSongSelect(song)}
+        className="w-full text-left transition-all"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '10px 16px',
+          background: isActive ? C.amberDim : 'transparent',
+          borderLeft: isActive ? `3px solid ${C.amber}` : '3px solid transparent',
+          cursor: 'pointer',
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            background: isActive ? C.amber : rowAccent,
+            opacity: isActive ? 1 : 0.65,
+            flexShrink: 0,
+          }}
+        />
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontFamily: isActive ? 'Georgia, "Times New Roman", serif' : 'inherit',
+              fontStyle: isActive ? 'italic' : 'normal',
+              fontSize: '0.85rem',
+              fontWeight: isActive ? 700 : 500,
+              color: isActive ? C.amber : C.textPri,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {song.title}
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontFamily: 'monospace',
+              fontSize: '0.65rem',
+              color: C.textMut,
+              marginTop: 2,
+              minWidth: 0,
+            }}
+          >
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {song.artist}
+            </span>
+            <span
+              style={{
+                color: hasPlayableTab ? C.green : C.textMut,
+                border: `1px solid ${hasPlayableTab ? C.greenBd : 'rgba(255,255,255,0.08)'}`,
+                borderRadius: 999,
+                padding: '1px 5px',
+                fontSize: '0.55rem',
+                flexShrink: 0,
+              }}
+            >
+              {badge}
+            </span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            fontFamily: 'monospace',
+            fontSize: '0.62rem',
+            color: isActive ? C.amber : C.textMut,
+            textAlign: 'right',
+            flexShrink: 0,
+          }}
+        >
+          <div>{song.key}</div>
+          <div>{song.bpm}<span style={{ opacity: 0.6 }}>bpm</span></div>
+        </div>
+      </button>
+    )
+  }
 
   if (stageMode) {
     return <StageMode onExit={() => setStageMode(false)} />
@@ -480,6 +619,44 @@ export function SongsViewV2() {
                 </button>
               </div>
             )}
+            {recentSongs.length > 0 && (
+              <div>
+                <div
+                  className="px-4 py-2"
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.6rem',
+                    color: C.green,
+                    letterSpacing: '0.2em',
+                    textTransform: 'uppercase',
+                    borderBottom: `1px solid rgba(255,255,255,0.04)`,
+                    marginTop: 8,
+                  }}
+                >
+                  Recent Practice
+                </div>
+                {recentSongs.map(song => renderSongRow(song, 'recent'))}
+              </div>
+            )}
+            {bassReadySongs.length > 0 && (
+              <div>
+                <div
+                  className="px-4 py-2"
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.6rem',
+                    color: C.rose,
+                    letterSpacing: '0.2em',
+                    textTransform: 'uppercase',
+                    borderBottom: `1px solid rgba(255,255,255,0.04)`,
+                    marginTop: 8,
+                  }}
+                >
+                  Bass-ready Tabs
+                </div>
+                {bassReadySongs.map(song => renderSongRow(song, 'ready'))}
+              </div>
+            )}
             {SONG_CATEGORIES.map(cat => (
               <div key={cat.name}>
                 {/* Category label */}
@@ -499,78 +676,7 @@ export function SongsViewV2() {
                 </div>
 
                 {/* Song rows */}
-                {cat.songs.map(song => {
-                  const isActive = selectedSong?.title === song.title
-                  return (
-                    <button
-                      key={song.title}
-                      onClick={() => handleSongSelect(song)}
-                      className="w-full text-left transition-all"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
-                        padding: '10px 16px',
-                        background: isActive ? C.amberDim : 'transparent',
-                        borderLeft: isActive ? `3px solid ${C.amber}` : '3px solid transparent',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {/* Active indicator dot */}
-                      <span
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: '50%',
-                          background: isActive ? C.amber : C.textMut,
-                          flexShrink: 0,
-                        }}
-                      />
-
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontFamily: isActive
-                              ? 'Georgia, "Times New Roman", serif'
-                              : 'inherit',
-                            fontStyle: isActive ? 'italic' : 'normal',
-                            fontSize: '0.85rem',
-                            fontWeight: isActive ? 700 : 500,
-                            color: isActive ? C.amber : C.textPri,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {song.title}
-                        </div>
-                        <div
-                          style={{
-                            fontFamily: 'monospace',
-                            fontSize: '0.65rem',
-                            color: C.textMut,
-                            marginTop: 2,
-                          }}
-                        >
-                          {song.artist}
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          fontFamily: 'monospace',
-                          fontSize: '0.62rem',
-                          color: isActive ? C.amber : C.textMut,
-                          textAlign: 'right',
-                          flexShrink: 0,
-                        }}
-                      >
-                        <div>{song.key}</div>
-                        <div>{song.bpm}<span style={{ opacity: 0.6 }}>bpm</span></div>
-                      </div>
-                    </button>
-                  )
-                })}
+                {cat.songs.map(song => renderSongRow(song))}
               </div>
             ))}
           </div>

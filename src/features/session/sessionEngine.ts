@@ -139,6 +139,8 @@ export function recordSession(plan: SessionPlan, doneBlocks: BlockKind[]): Sessi
   const minutesDone = plan.blocks
     .filter(b => doneBlocks.includes(b.kind))
     .reduce((s, b) => s + b.minutes, 0)
+  const previousToday = log.entries[0]?.date === date ? log.entries[0] : null
+  const previousMinutes = previousToday?.totalMinutes ?? 0
 
   // Streak update: if today already logged, replace last entry; else compute streak from gap
   let newStreak: number
@@ -152,6 +154,13 @@ export function recordSession(plan: SessionPlan, doneBlocks: BlockKind[]): Sessi
 
   // Per-kind dwell
   const byKind = { ...log.byKind }
+  if (previousToday) {
+    for (const b of plan.blocks) {
+      if (previousToday.doneBlocks.includes(b.kind)) {
+        byKind[b.kind] = Math.max(0, byKind[b.kind] - b.minutes)
+      }
+    }
+  }
   for (const b of plan.blocks) {
     if (doneBlocks.includes(b.kind)) byKind[b.kind] += b.minutes
   }
@@ -173,7 +182,7 @@ export function recordSession(plan: SessionPlan, doneBlocks: BlockKind[]): Sessi
   const newLog: SessionLog = {
     streakDays: newStreak,
     lastDate: date,
-    totalMinutes: log.totalMinutes + minutesDone,
+    totalMinutes: Math.max(0, log.totalMinutes - previousMinutes + minutesDone),
     byKind,
     entries: entries.slice(0, 60),
   }

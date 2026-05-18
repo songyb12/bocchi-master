@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PlaybackProvider, usePlaybackState, usePlaybackDispatch } from '@/contexts/PlaybackContext'
 import { AudioContextProvider } from '@/core/audio/AudioContextProvider'
 import { TabView } from '@/features/tab-view/TabView'
@@ -33,7 +33,7 @@ function AppContent() {
   const scoring = useScoring(track)
   const { items: feedbackItems, showFeedback } = useHitFeedback()
   const [view, setView] = useState<View>('home')
-  const [instrument] = useState<'guitar' | 'bass'>('guitar')
+  const [instrument] = useState<'guitar' | 'bass'>('bass')
   const [openCategory, setOpenCategory] = useState<string | null>(null)
 
   useEffect(() => {
@@ -107,6 +107,11 @@ function AppContent() {
     ...CAGED_TRACKS,
   ], [])
 
+  const bassQuickStartTrackId = useMemo(
+    () => DEMO_TRACKS.find(t => t.id === 'demo-bass-groove')?.id ?? DEMO_TRACKS[0]?.id ?? '',
+    [],
+  )
+
   const selectTrack = useCallback((trackId: string) => {
     const t = allTracks.find(t => t.id === trackId)
     if (t) dispatch({ type: 'SET_TRACK', track: t })
@@ -152,7 +157,7 @@ function AppContent() {
           />
         ) : view === 'home' ? (
           <PracticeHome
-            onQuickStart={() => selectTrack(DEMO_TRACKS[0]?.id ?? '')}
+            onQuickStart={() => selectTrack(bassQuickStartTrackId)}
             onOpen={(next) => setView(next)}
           />
         ) : view === 'songs' ? (
@@ -262,4 +267,3 @@ export function App() {
     </AudioContextProvider>
   )
 }
-
