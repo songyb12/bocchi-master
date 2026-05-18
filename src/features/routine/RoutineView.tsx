@@ -483,21 +483,50 @@ export function RoutineView() {
             WEEKLY FOCUS · {r.label}
           </div>
           <div className="flex flex-col gap-1">
-            {r.weekly.map((w) => (
-              <div
-                key={w.day}
-                className="flex items-baseline gap-3 py-1.5"
-                style={{ borderBottom: '1px solid #1a1a1a' }}
-              >
-                <span
-                  className="font-mono"
-                  style={{ color: '#fbbc00', fontSize: 11, fontWeight: 700, width: 36 }}
+            {r.weekly.map((w) => {
+              const today = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()]
+              const isToday = w.day === today
+              return (
+                <div
+                  key={w.day}
+                  className="flex items-baseline gap-3 py-1.5 px-2 rounded"
+                  style={{
+                    borderBottom: '1px solid #1a1a1a',
+                    background: isToday ? 'rgba(126,255,139,0.06)' : 'transparent',
+                  }}
                 >
-                  {w.day}
-                </span>
-                <span style={{ color: '#bbb', fontSize: 12, lineHeight: 1.5 }}>{w.focus}</span>
-              </div>
-            ))}
+                  <span
+                    className="font-mono"
+                    style={{
+                      color: isToday ? '#7eff8b' : '#fbbc00',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      width: 36,
+                    }}
+                  >
+                    {isToday ? `▸ ${w.day}` : w.day}
+                  </span>
+                  <span
+                    style={{
+                      color: isToday ? '#eaffea' : '#bbb',
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      fontWeight: isToday ? 500 : 400,
+                    }}
+                  >
+                    {w.focus}
+                  </span>
+                  {isToday && (
+                    <span
+                      className="font-mono text-[9px] ml-auto"
+                      style={{ color: '#7eff8b88' }}
+                    >
+                      TODAY
+                    </span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
 
