@@ -90,6 +90,9 @@ export function ChordTimeline({
   bpm,
   timeSignature,
   onActiveRootChange,
+  externalChords,
+  externalDurationSec,
+  externalTitle,
 }: {
   youtubeId: string | null
   currentTime: number
@@ -104,6 +107,10 @@ export function ChordTimeline({
    * `bassRootHints` so the bass learner sees all valid root positions.
    */
   onActiveRootChange?: (root: string | null) => void
+  /** Preloaded chord segments from an AudioChord handoff URL. */
+  externalChords?: ChordSegment[]
+  externalDurationSec?: number
+  externalTitle?: string
 }) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [chords, setChords] = useState<ChordSegment[]>([])
@@ -113,7 +120,8 @@ export function ChordTimeline({
   const scrollRef = useRef<HTMLDivElement>(null)
   const activeIdxRef = useRef(-1)
 
-  const fileId = youtubeId ? `yt_${youtubeId}` : null
+  const hasExternalChords = (externalChords?.length ?? 0) > 0
+  const fileId = !hasExternalChords && youtubeId ? `yt_${youtubeId}` : null
   const beatsPerMeasure = timeSignature?.[0] ?? 4
   const canQuantize = !!bpm && bpm > 0
 
@@ -139,6 +147,19 @@ export function ChordTimeline({
 
   // On youtubeId change, check for cached result
   useEffect(() => {
+    if (hasExternalChords) {
+      const segs = externalChords ?? []
+      setPhase('ready')
+      setError(null)
+      setChords(segs)
+      setDuration(
+        externalDurationSec && externalDurationSec > 0
+          ? externalDurationSec
+          : Math.max(0, ...segs.map((seg) => seg.end)),
+      )
+      activeIdxRef.current = -1
+      return
+    }
     if (!fileId) {
       setPhase('idle')
       setChords([])
@@ -155,7 +176,7 @@ export function ChordTimeline({
       setPhase(ok ? 'ready' : 'unavailable')
     })()
     return () => { cancelled = true }
-  }, [fileId, loadCached])
+  }, [fileId, loadCached, hasExternalChords, externalChords, externalDurationSec])
 
   // Run analysis (ingest + analyze)
   const runAnalysis = useCallback(async () => {
@@ -294,7 +315,11 @@ export function ChordTimeline({
     if (!canQuantize && mode === 'measures') setMode('continuous')
   }, [canQuantize, mode])
 
-  if (!fileId) return null
+  if (!fileId && !hasExternalChords) return null
+
+  const sourceLabel = hasExternalChords
+    ? `AudioChord handoff${externalTitle ? ` · ${externalTitle}` : ''}`
+    : 'AudioChord (Crema)'
 
   return (
     <div
@@ -310,7 +335,7 @@ export function ChordTimeline({
           ♪ Chord Track
         </span>
         <span className="text-[10px] font-mono" style={{ color: C.textMut }}>
-          AudioChord (Crema) · {chords.length} segments
+          {sourceLabel} · {chords.length} segments
           {mode === 'measures' && visibleMeasures.length > 0 && ` · ${visibleMeasures.length} measures @ ${bpm}bpm`}
         </span>
         {chordStats.top.length > 0 && (
@@ -363,7 +388,7 @@ export function ChordTimeline({
             </button>
           </div>
         )}
-        {phase === 'unavailable' && (
+        {phase === 'unavailable' && !hasExternalChords && (
           <button
             onClick={runAnalysis}
             className="text-[10px] font-mono px-3 py-1 rounded transition-all"

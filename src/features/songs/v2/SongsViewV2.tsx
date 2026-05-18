@@ -23,6 +23,11 @@ import { Fretboard } from '@/features/fretboard/Fretboard'
 import { CountInOverlay } from '@/features/tab-view/shared/CountInOverlay'
 import { SONG_CATEGORIES, type SongEntry } from '@/core/note/SongTracks'
 import { useYouTubePlayer, YT_STATE, type YouTubeSync } from '@/hooks/useYouTubePlayer'
+import {
+  createAudioChordPracticeTrack,
+  parseAudioChordHandoffFromHash,
+  type AudioChordPracticeHandoff,
+} from '@/lib/audiochordHandoff'
 import { StemSeparator } from '../StemSeparator'
 import { StageMode } from '../StageMode'
 import { ChordTimeline } from '../ChordTimeline'
@@ -114,6 +119,7 @@ export function SongsViewV2() {
   const dispatch = usePlaybackDispatch()
 
   const [selectedSong, setSelectedSong] = useState<SongEntry | null>(null)
+  const [importedPractice, setImportedPractice] = useState<AudioChordPracticeHandoff | null>(null)
   const [instrument, setInstrument] = useState<'bass' | 'guitar'>('bass')
   const [syncEnabled, setSyncEnabled] = useState(true)
   const [offsetSec, setOffsetSec] = useState(0)
@@ -146,15 +152,33 @@ export function SongsViewV2() {
   const trackHasEvents = (track?.events.length ?? 0) > 0
   useEffect(() => {
     setShowTab(trackHasEvents)
-  }, [trackHasEvents, selectedSong?.youtubeId])
+  }, [trackHasEvents, selectedSong?.youtubeId, importedPractice?.title])
 
   const ytContainerRef = useRef<HTMLDivElement>(null)
+  const handoffConsumedRef = useRef(false)
 
   // Stable ref to avoid stale closures in sync callback
   const syncRef = useRef({ enabled: syncEnabled, offset: offsetSec, bpm, track })
   syncRef.current = { enabled: syncEnabled, offset: offsetSec, bpm, track }
 
   const allTracks = useMemo(() => SONG_CATEGORIES.flatMap(c => c.tracks), [])
+
+  useEffect(() => {
+    if (handoffConsumedRef.current) return
+    const handoff = parseAudioChordHandoffFromHash()
+    if (!handoff) return
+    handoffConsumedRef.current = true
+    const importedTrack = createAudioChordPracticeTrack(handoff)
+
+    setImportedPractice(handoff)
+    setSelectedSong(null)
+    setInstrument('bass')
+    setSyncEnabled(false)
+    setOffsetSec(0)
+    dispatch({ type: 'SET_STATUS', status: 'stopped' })
+    dispatch({ type: 'TICK', beat: 0, measure: 0 })
+    dispatch({ type: 'SET_TRACK', track: importedTrack })
+  }, [dispatch])
 
   // YouTube sync callback — called every animation frame by the hook
   const handleSync = useCallback((sync: YouTubeSync) => {
@@ -189,7 +213,9 @@ export function SongsViewV2() {
   )
 
   const handleSongSelect = useCallback((song: SongEntry) => {
+    setImportedPractice(null)
     setSelectedSong(song)
+    setSyncEnabled(true)
     setOffsetSec(0)
     dispatch({ type: 'SET_STATUS', status: 'stopped' })
     dispatch({ type: 'TICK', beat: 0, measure: 0 })
@@ -212,6 +238,20 @@ export function SongsViewV2() {
     : []
 
   const isYTPlaying = ytState === YT_STATE.PLAYING
+  const hasPractice = !!selectedSong || !!importedPractice
+  const practiceBpm = importedPractice?.bpm ?? selectedSong?.bpm ?? bpm
+  const practiceCurrentTime = importedPractice
+    ? Math.max(0, (currentBeat * 60) / Math.max(1, practiceBpm))
+    : Math.max(0, ytTime - offsetSec)
+
+  const handleTimelineSeek = useCallback((audioSec: number) => {
+    if (importedPractice) {
+      const nextBeat = Math.max(0, (audioSec * practiceBpm) / 60)
+      dispatch({ type: 'TICK', beat: nextBeat, measure: Math.floor(nextBeat / 4) })
+      return
+    }
+    ytSeek(audioSec + offsetSec)
+  }, [dispatch, importedPractice, offsetSec, practiceBpm, ytSeek])
 
   if (stageMode) {
     return <StageMode onExit={() => setStageMode(false)} />
@@ -361,6 +401,85 @@ export function SongsViewV2() {
 
           {/* Scrollable list */}
           <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }}>
+            {importedPractice && (
+              <div>
+                <div
+                  className="px-4 py-2"
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.6rem',
+                    color: C.amber,
+                    letterSpacing: '0.2em',
+                    textTransform: 'uppercase',
+                    borderBottom: `1px solid rgba(255,255,255,0.04)`,
+                    marginTop: 8,
+                  }}
+                >
+                  AudioChord Import
+                </div>
+                <button
+                  className="w-full text-left"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '12px 16px',
+                    background: C.amberDim,
+                    borderLeft: `3px solid ${C.amber}`,
+                    cursor: 'default',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: C.amber,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontFamily: 'Georgia, "Times New Roman", serif',
+                        fontStyle: 'italic',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        color: C.amber,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {importedPractice.title}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: 'monospace',
+                        fontSize: '0.65rem',
+                        color: C.textMut,
+                        marginTop: 2,
+                      }}
+                    >
+                      {importedPractice.chords.length} chord segments
+                      {importedPractice.truncated ? ' · trimmed' : ''}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: 'monospace',
+                      fontSize: '0.62rem',
+                      color: C.amber,
+                      textAlign: 'right',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <div>AUTO</div>
+                    <div>{practiceBpm}<span style={{ opacity: 0.6 }}>bpm</span></div>
+                  </div>
+                </button>
+              </div>
+            )}
             {SONG_CATEGORIES.map(cat => (
               <div key={cat.name}>
                 {/* Category label */}
@@ -460,7 +579,7 @@ export function SongsViewV2() {
         {/* ── RIGHT: Main practice area ────────────────────────────────────────── */}
         <main className="flex-1 flex flex-col gap-6 p-6 overflow-y-auto min-w-0">
 
-          {selectedSong ? (
+          {hasPractice ? (
             <>
               {/* Song meta banner */}
               <div
@@ -472,7 +591,7 @@ export function SongsViewV2() {
               >
                 <div>
                   <div style={{ fontFamily: 'monospace', fontSize: '0.6rem', color: C.textMut, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-                    Now Practicing
+                    {selectedSong ? 'Now Practicing' : 'AudioChord Import'}
                   </div>
                   <div
                     style={{
@@ -484,44 +603,48 @@ export function SongsViewV2() {
                       marginTop: 2,
                     }}
                   >
-                    {selectedSong.title}
+                    {selectedSong?.title ?? importedPractice?.title}
                   </div>
                   <div style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: C.textSec, marginTop: 2 }}>
-                    {selectedSong.artist}
+                    {selectedSong?.artist ?? `${importedPractice?.chords.length ?? 0} chord segments from AudioChord`}
+                    {importedPractice?.truncated ? ' · trimmed for quick handoff' : ''}
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontFamily: 'monospace', fontSize: '0.6rem', color: C.textMut, letterSpacing: '0.1em' }}>BPM</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: 700, color: C.amber }}>{selectedSong.bpm}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: 700, color: C.amber }}>{practiceBpm}</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontFamily: 'monospace', fontSize: '0.6rem', color: C.textMut, letterSpacing: '0.1em' }}>KEY</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: 700, color: C.rose }}>{selectedSong.key}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: 700, color: C.rose }}>{selectedSong?.key ?? 'AUTO'}</div>
                   </div>
                 </div>
               </div>
 
               {/* YouTube embed card */}
-              <div
-                className="rounded-2xl overflow-hidden"
-                style={{
-                  background: '#000',
-                  boxShadow: `0 0 0 1px rgba(255,255,255,0.08), 0 8px 32px rgba(0,0,0,0.6)`,
-                  aspectRatio: '16 / 9',
-                }}
-              >
-                <div ref={ytContainerRef} className="w-full h-full" />
-              </div>
+              {selectedSong && (
+                <div
+                  className="rounded-2xl overflow-hidden"
+                  style={{
+                    background: '#000',
+                    boxShadow: `0 0 0 1px rgba(255,255,255,0.08), 0 8px 32px rgba(0,0,0,0.6)`,
+                    aspectRatio: '16 / 9',
+                  }}
+                >
+                  <div ref={ytContainerRef} className="w-full h-full" />
+                </div>
+              )}
 
               {/* Sync controls bar */}
-              <div
-                className="flex items-center gap-4 rounded-2xl px-5 py-3"
-                style={{
-                  background: C.surface,
-                  boxShadow: C.inset,
-                }}
-              >
+              {selectedSong ? (
+                <div
+                  className="flex items-center gap-4 rounded-2xl px-5 py-3"
+                  style={{
+                    background: C.surface,
+                    boxShadow: C.inset,
+                  }}
+                >
                 {/* Sync toggle */}
                 <button
                   onClick={() => setSyncEnabled(!syncEnabled)}
@@ -582,7 +705,21 @@ export function SongsViewV2() {
                     </span>
                   )}
                 </div>
-              </div>
+                </div>
+              ) : (
+                <div
+                  className="rounded-2xl px-5 py-3"
+                  style={{
+                    background: C.surface,
+                    boxShadow: C.inset,
+                    color: C.textSec,
+                    fontFamily: 'monospace',
+                    fontSize: '0.72rem',
+                  }}
+                >
+                  Space로 Bocchi 재생 타임라인을 움직이고, 아래 코드 블록을 누르면 해당 위치로 이동합니다.
+                </div>
+              )}
             </>
           ) : (
             /* Empty state */
@@ -615,14 +752,17 @@ export function SongsViewV2() {
           {selectedSong && <StagesPanel />}
 
           {/* ── Chord Timeline (AudioChord) ────────────────────────────────────── */}
-          {selectedSong && (
+          {hasPractice && (
             <ChordTimeline
-              youtubeId={selectedSong.youtubeId ?? null}
-              currentTime={Math.max(0, ytTime - offsetSec)}
-              onSeek={(audioSec) => ytSeek(audioSec + offsetSec)}
-              bpm={selectedSong.bpm}
+              youtubeId={selectedSong?.youtubeId ?? null}
+              currentTime={practiceCurrentTime}
+              onSeek={handleTimelineSeek}
+              bpm={practiceBpm}
               timeSignature={track?.timeSignature ?? [4, 4]}
               onActiveRootChange={setActiveChordRoot}
+              externalChords={importedPractice?.chords}
+              externalDurationSec={importedPractice?.durationSec ?? undefined}
+              externalTitle={importedPractice?.title}
             />
           )}
 

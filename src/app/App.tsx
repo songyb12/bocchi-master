@@ -36,6 +36,10 @@ function AppContent() {
   const [instrument] = useState<'guitar' | 'bass'>('guitar')
   const [openCategory, setOpenCategory] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (window.location.hash.includes('audiochord=')) setView('songs')
+  }, [])
+
   // Active notes for fretboard (show during playing AND paused)
   const activeNotes = useMemo(() => {
     if (!track || status === 'stopped') return []
