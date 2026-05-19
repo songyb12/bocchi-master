@@ -55,7 +55,9 @@ const C = {
 } as const
 
 const RECENT_SONGS_KEY = 'bocchi.songs.recent'
+const RECENT_IMPORTS_KEY = 'bocchi.audiochord.recent'
 const MAX_RECENT_SONGS = 5
+const MAX_RECENT_IMPORTS = 4
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatTime(s: number) {
@@ -66,6 +68,30 @@ function formatTime(s: number) {
 
 function songKey(song: SongEntry): string {
   return `${song.artist}::${song.title}`
+}
+
+function handoffKey(handoff: AudioChordPracticeHandoff): string {
+  return handoff.fileId || `${handoff.title}::${handoff.durationSec ?? 0}`
+}
+
+function clampBpm(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return null
+  return Math.max(30, Math.min(260, Number(n.toFixed(1))))
+}
+
+function normalizeKey(value: string): string | null {
+  const key = value.trim().slice(0, 16)
+  return key || null
+}
+
+function isStoredHandoff(value: unknown): value is AudioChordPracticeHandoff {
+  if (!value || typeof value !== 'object') return false
+  const handoff = value as AudioChordPracticeHandoff
+  return handoff.source === 'audiochord'
+    && typeof handoff.title === 'string'
+    && Array.isArray(handoff.chords)
+    && handoff.chords.length > 0
 }
 
 function loadRecentSongKeys(): string[] {
@@ -82,6 +108,23 @@ function saveRecentSong(song: SongEntry): string[] {
   const next = [songKey(song), ...loadRecentSongKeys().filter(key => key !== songKey(song))]
     .slice(0, MAX_RECENT_SONGS)
   try { localStorage.setItem(RECENT_SONGS_KEY, JSON.stringify(next)) } catch { /* */ }
+  return next
+}
+
+function loadRecentImports(): AudioChordPracticeHandoff[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RECENT_IMPORTS_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter(isStoredHandoff).slice(0, MAX_RECENT_IMPORTS) : []
+  } catch {
+    return []
+  }
+}
+
+function saveRecentImport(handoff: AudioChordPracticeHandoff): AudioChordPracticeHandoff[] {
+  const next = [handoff, ...loadRecentImports().filter(item => handoffKey(item) !== handoffKey(handoff))]
+    .slice(0, MAX_RECENT_IMPORTS)
+  try { localStorage.setItem(RECENT_IMPORTS_KEY, JSON.stringify(next)) } catch { /* */ }
   return next
 }
 
@@ -151,6 +194,9 @@ export function SongsViewV2() {
   const [activeChordRoot, setActiveChordRoot] = useState<string | null>(null)
   const [showTab, setShowTab] = useState(true)
   const [recentSongKeys, setRecentSongKeys] = useState<string[]>(() => loadRecentSongKeys())
+  const [recentImports, setRecentImports] = useState<AudioChordPracticeHandoff[]>(() => loadRecentImports())
+  const [importBpmInput, setImportBpmInput] = useState('')
+  const [importKeyInput, setImportKeyInput] = useState('')
 
   // Per-song offset persistence — sync drift differs per video upload
   const offsetKey = selectedSong?.youtubeId ? `bocchi.offset.${selectedSong.youtubeId}` : null
@@ -197,6 +243,15 @@ export function SongsViewV2() {
     [allSongs, recentSongKeys],
   )
 
+  const matchedImportSong = useMemo(() => {
+    if (!importedPractice) return null
+    return allSongs.find((song) => {
+      if (importedPractice.fileId === `yt_${song.youtubeId}`) return true
+      const title = importedPractice.title.toLowerCase()
+      return title.includes(song.title.toLowerCase())
+    }) ?? null
+  }, [allSongs, importedPractice])
+
   const bassReadySongs = useMemo(
     () => allSongs
       .filter(song => (trackById.get(song.bassTrackId)?.events.length ?? 0) > 0)
@@ -209,22 +264,32 @@ export function SongsViewV2() {
     return trackById.get(trackId) ?? null
   }, [instrument, trackById])
 
+  const loadImportedPractice = useCallback((handoff: AudioChordPracticeHandoff) => {
+    const bpmValue = clampBpm(handoff.bpm) ?? 100
+    const keyValue = normalizeKey(handoff.key ?? '') ?? null
+    const normalized = { ...handoff, bpm: bpmValue, key: keyValue }
+    const importedTrack = createAudioChordPracticeTrack(normalized)
+
+    setImportedPractice(normalized)
+    setSelectedSong(null)
+    setInstrument('bass')
+    setSyncEnabled(false)
+    setOffsetSec(0)
+    setImportBpmInput(String(bpmValue))
+    setImportKeyInput(keyValue ?? '')
+    setRecentImports(saveRecentImport(normalized))
+    dispatch({ type: 'SET_STATUS', status: 'stopped' })
+    dispatch({ type: 'TICK', beat: 0, measure: 0 })
+    dispatch({ type: 'SET_TRACK', track: importedTrack })
+  }, [dispatch])
+
   useEffect(() => {
     if (handoffConsumedRef.current) return
     const handoff = parseAudioChordHandoffFromHash()
     if (!handoff) return
     handoffConsumedRef.current = true
-    const importedTrack = createAudioChordPracticeTrack(handoff)
-
-    setImportedPractice(handoff)
-    setSelectedSong(null)
-    setInstrument('bass')
-    setSyncEnabled(false)
-    setOffsetSec(0)
-    dispatch({ type: 'SET_STATUS', status: 'stopped' })
-    dispatch({ type: 'TICK', beat: 0, measure: 0 })
-    dispatch({ type: 'SET_TRACK', track: importedTrack })
-  }, [dispatch])
+    loadImportedPractice(handoff)
+  }, [loadImportedPractice])
 
   // YouTube sync callback — called every animation frame by the hook
   const handleSync = useCallback((sync: YouTubeSync) => {
@@ -285,6 +350,7 @@ export function SongsViewV2() {
   const isYTPlaying = ytState === YT_STATE.PLAYING
   const hasPractice = !!selectedSong || !!importedPractice
   const practiceBpm = importedPractice?.bpm ?? selectedSong?.bpm ?? bpm
+  const practiceKey = selectedSong?.key ?? importedPractice?.key ?? 'AUTO'
   const practiceCurrentTime = importedPractice
     ? Math.max(0, (currentBeat * 60) / Math.max(1, practiceBpm))
     : Math.max(0, ytTime - offsetSec)
@@ -297,6 +363,89 @@ export function SongsViewV2() {
     }
     ytSeek(audioSec + offsetSec)
   }, [dispatch, importedPractice, offsetSec, practiceBpm, ytSeek])
+
+  const applyImportedSettings = useCallback((preset?: { bpm?: number; key?: string | null }) => {
+    if (!importedPractice) return
+    const bpmValue = clampBpm(preset?.bpm ?? importBpmInput) ?? importedPractice.bpm ?? 100
+    const keyValue = normalizeKey(preset?.key ?? importKeyInput)
+    const updated = { ...importedPractice, bpm: bpmValue, key: keyValue }
+    const seconds = practiceCurrentTime
+    const importedTrack = createAudioChordPracticeTrack(updated)
+
+    setImportedPractice(updated)
+    setImportBpmInput(String(bpmValue))
+    setImportKeyInput(keyValue ?? '')
+    setRecentImports(saveRecentImport(updated))
+    dispatch({ type: 'SET_TRACK', track: importedTrack })
+    dispatch({ type: 'TICK', beat: Math.max(0, (seconds * bpmValue) / 60), measure: Math.floor(Math.max(0, (seconds * bpmValue) / 60) / 4) })
+  }, [dispatch, importBpmInput, importKeyInput, importedPractice, practiceCurrentTime])
+
+  const renderImportRow = (handoff: AudioChordPracticeHandoff) => {
+    const isActive = importedPractice && handoffKey(importedPractice) === handoffKey(handoff)
+    return (
+      <button
+        key={`import-${handoffKey(handoff)}`}
+        onClick={() => loadImportedPractice(handoff)}
+        className="w-full text-left transition-all"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '10px 16px',
+          background: isActive ? C.amberDim : 'transparent',
+          borderLeft: isActive ? `3px solid ${C.amber}` : '3px solid transparent',
+          cursor: 'pointer',
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            background: isActive ? C.amber : C.green,
+            opacity: isActive ? 1 : 0.7,
+            flexShrink: 0,
+          }}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: '0.85rem',
+              fontWeight: isActive ? 700 : 500,
+              color: isActive ? C.amber : C.textPri,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {handoff.title}
+          </div>
+          <div
+            style={{
+              fontFamily: 'monospace',
+              fontSize: '0.65rem',
+              color: C.textMut,
+              marginTop: 2,
+            }}
+          >
+            {handoff.chords.length} chords · {handoff.fileId ?? 'audio'}
+          </div>
+        </div>
+        <div
+          style={{
+            fontFamily: 'monospace',
+            fontSize: '0.62rem',
+            color: isActive ? C.amber : C.textMut,
+            textAlign: 'right',
+            flexShrink: 0,
+          }}
+        >
+          <div>{handoff.key ?? 'AUTO'}</div>
+          <div>{handoff.bpm ?? '-'}<span style={{ opacity: 0.6 }}>bpm</span></div>
+        </div>
+      </button>
+    )
+  }
 
   const renderSongRow = (song: SongEntry, variant: 'default' | 'recent' | 'ready' = 'default') => {
     const isActive = selectedSong?.title === song.title
@@ -460,11 +609,11 @@ export function SongsViewV2() {
       </header>
 
       {/* ── Body: two columns ────────────────────────────────────────────────── */}
-      <div className="flex flex-1 gap-0 min-h-0">
+      <div className="bocchi-songs-body flex flex-1 gap-0 min-h-0">
 
         {/* ── LEFT: Song List ─────────────────────────────────────────────────── */}
         <aside
-          className="flex flex-col"
+          className="bocchi-song-rail flex flex-col"
           style={{
             width: '300px',
             minWidth: '220px',
@@ -540,6 +689,25 @@ export function SongsViewV2() {
 
           {/* Scrollable list */}
           <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }}>
+            {recentImports.length > 0 && (
+              <div>
+                <div
+                  className="px-4 py-2"
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.6rem',
+                    color: C.green,
+                    letterSpacing: '0.2em',
+                    textTransform: 'uppercase',
+                    borderBottom: `1px solid rgba(255,255,255,0.04)`,
+                    marginTop: 8,
+                  }}
+                >
+                  Recent AudioChord
+                </div>
+                {recentImports.map(renderImportRow)}
+              </div>
+            )}
             {importedPractice && (
               <div>
                 <div
@@ -683,7 +851,7 @@ export function SongsViewV2() {
         </aside>
 
         {/* ── RIGHT: Main practice area ────────────────────────────────────────── */}
-        <main className="flex-1 flex flex-col gap-6 p-6 overflow-y-auto min-w-0">
+        <main className="bocchi-song-main flex-1 flex flex-col gap-6 p-6 overflow-y-auto min-w-0">
 
           {hasPractice ? (
             <>
@@ -723,10 +891,93 @@ export function SongsViewV2() {
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontFamily: 'monospace', fontSize: '0.6rem', color: C.textMut, letterSpacing: '0.1em' }}>KEY</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: 700, color: C.rose }}>{selectedSong?.key ?? 'AUTO'}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: 700, color: C.rose }}>{practiceKey}</div>
                   </div>
                 </div>
               </div>
+
+              {importedPractice && (
+                <div
+                  className="flex items-center gap-3 rounded-2xl px-5 py-3 flex-wrap"
+                  style={{
+                    background: C.surface,
+                    boxShadow: C.inset,
+                    border: `1px solid rgba(113,220,143,0.16)`,
+                  }}
+                >
+                  <span style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: C.green, fontWeight: 700 }}>
+                    IMPORT SETTINGS
+                  </span>
+                  <label className="flex items-center gap-2" style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: C.textSec }}>
+                    BPM
+                    <input
+                      value={importBpmInput}
+                      onChange={(event) => setImportBpmInput(event.target.value)}
+                      inputMode="decimal"
+                      style={{
+                        width: 76,
+                        height: 30,
+                        borderRadius: 7,
+                        border: `1px solid rgba(255,255,255,0.1)`,
+                        background: C.surface2,
+                        color: C.textPri,
+                        padding: '0 8px',
+                      }}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2" style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: C.textSec }}>
+                    KEY
+                    <input
+                      value={importKeyInput}
+                      onChange={(event) => setImportKeyInput(event.target.value)}
+                      placeholder="Em"
+                      style={{
+                        width: 70,
+                        height: 30,
+                        borderRadius: 7,
+                        border: `1px solid rgba(255,255,255,0.1)`,
+                        background: C.surface2,
+                        color: C.textPri,
+                        padding: '0 8px',
+                      }}
+                    />
+                  </label>
+                  <button
+                    onClick={() => applyImportedSettings()}
+                    style={{
+                      minHeight: 30,
+                      borderRadius: 7,
+                      border: `1px solid ${C.greenBd}`,
+                      background: C.greenDim,
+                      color: C.green,
+                      fontFamily: 'monospace',
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      padding: '0 10px',
+                    }}
+                  >
+                    Apply
+                  </button>
+                  {matchedImportSong && (
+                    <button
+                      onClick={() => applyImportedSettings({ bpm: matchedImportSong.bpm, key: matchedImportSong.key })}
+                      style={{
+                        minHeight: 30,
+                        borderRadius: 7,
+                        border: `1px solid ${C.amberBd}`,
+                        background: C.amberDim,
+                        color: C.amber,
+                        fontFamily: 'monospace',
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        padding: '0 10px',
+                      }}
+                    >
+                      Use catalog {matchedImportSong.bpm}bpm / {matchedImportSong.key}
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* YouTube embed card */}
               {selectedSong && (

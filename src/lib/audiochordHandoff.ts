@@ -8,6 +8,7 @@ export interface AudioChordPracticeHandoff {
   title: string
   fileId?: string | null
   bpm?: number | null
+  key?: string | null
   durationSec?: number | null
   model?: string | null
   truncated?: boolean
@@ -69,6 +70,7 @@ export function parseAudioChordHandoffFromHash(hash = window.location.hash): Aud
     const durationSec = asFiniteNumber(raw.durationSec)
     const bpm = asFiniteNumber(raw.bpm)
     const title = String(raw.title || 'AudioChord practice').slice(0, 120)
+    const key = typeof raw.key === 'string' ? raw.key.trim().slice(0, 16) : ''
 
     return {
       version: asFiniteNumber(raw.version) ?? 1,
@@ -76,6 +78,7 @@ export function parseAudioChordHandoffFromHash(hash = window.location.hash): Aud
       title,
       fileId: raw.fileId ? String(raw.fileId).slice(0, 80) : null,
       bpm: bpm && bpm >= 30 && bpm <= 260 ? Number(bpm.toFixed(1)) : null,
+      key: key || null,
       durationSec: durationSec && durationSec > 0 ? Number(durationSec.toFixed(2)) : null,
       model: raw.model ? String(raw.model).slice(0, 80) : null,
       truncated: Boolean(raw.truncated),
