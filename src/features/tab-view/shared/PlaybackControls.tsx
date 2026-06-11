@@ -10,9 +10,10 @@ export function PlaybackControls() {
       style={{ background: 'var(--bg-surface)' }}
     >
       {/* Play/Pause */}
+      {/* 44px touch targets below (w-11/h-11) — iPad-friendly (Apple HIG) */}
       <button
         onClick={togglePlay}
-        className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105"
+        className="w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105"
         style={{
           background: status === 'playing' ? 'var(--neon-yellow)' : 'var(--neon-cyan)',
           color: 'var(--bg-primary)',
@@ -38,7 +39,7 @@ export function PlaybackControls() {
       {status !== 'stopped' && (
         <button
           onClick={stop}
-          className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:scale-105"
+          className="w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-105"
           style={{
             background: 'var(--neon-red)',
             color: 'var(--bg-primary)',
@@ -56,7 +57,7 @@ export function PlaybackControls() {
       <div className="flex items-center gap-2">
         <button
           onClick={() => setBpm(Math.max(30, bpm - 5))}
-          className="w-7 h-7 rounded flex items-center justify-center text-sm"
+          className="w-11 h-11 rounded flex items-center justify-center text-lg"
           style={{ background: 'var(--bg-surface-hover)', color: 'var(--text-secondary)' }}
         >
           -
@@ -69,7 +70,7 @@ export function PlaybackControls() {
         </div>
         <button
           onClick={() => setBpm(Math.min(300, bpm + 5))}
-          className="w-7 h-7 rounded flex items-center justify-center text-sm"
+          className="w-11 h-11 rounded flex items-center justify-center text-lg"
           style={{ background: 'var(--bg-surface-hover)', color: 'var(--text-secondary)' }}
         >
           +
@@ -80,7 +81,7 @@ export function PlaybackControls() {
       <div className="flex items-center gap-1">
         <button
           onClick={() => setBpm(Math.max(30, Math.round(bpm / 2)))}
-          className="px-2 py-1 rounded font-mono text-[10px] transition-all"
+          className="px-2 py-1 min-w-11 min-h-11 rounded font-mono text-[10px] transition-all"
           style={{
             background: '#181818',
             color: '#aaa',
@@ -94,7 +95,7 @@ export function PlaybackControls() {
           onClick={() =>
             setBpm(track?.bpm ? Math.min(300, Math.round(track.bpm)) : bpm)
           }
-          className="px-2 py-1 rounded font-mono text-[10px] transition-all"
+          className="px-2 py-1 min-w-11 min-h-11 rounded font-mono text-[10px] transition-all"
           style={{
             background: '#181818',
             color: '#aaa',
@@ -106,7 +107,7 @@ export function PlaybackControls() {
         </button>
         <button
           onClick={() => setBpm(Math.min(300, Math.round(bpm * 2)))}
-          className="px-2 py-1 rounded font-mono text-[10px] transition-all"
+          className="px-2 py-1 min-w-11 min-h-11 rounded font-mono text-[10px] transition-all"
           style={{
             background: '#181818',
             color: '#aaa',

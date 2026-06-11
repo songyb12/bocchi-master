@@ -63,6 +63,20 @@ export interface DrillCompletionResult {
   lessonCompleted: boolean
 }
 
+/** Locate a drill and its parent lesson inside an instrument's curriculum. */
+export function findDrill(
+  instrument: Instrument,
+  drillId: string,
+): { drill: Drill; lesson: Lesson } | null {
+  for (const level of curriculumFor(instrument).levels) {
+    for (const lesson of level.lessons) {
+      const drill = lesson.drills.find(d => d.id === drillId)
+      if (drill) return { drill, lesson }
+    }
+  }
+  return null
+}
+
 /**
  * Pure core (unit-testable): next snapshot after completing `drillId`.
  * Returns null when the drill is unknown or already completed — completing
@@ -76,14 +90,7 @@ export function applyDrillCompletion(
 ): DrillCompletionResult | null {
   if (progress.completedDrills.includes(drillId)) return null
 
-  let found: { drill: Drill; lesson: Lesson } | null = null
-  for (const level of curriculumFor(instrument).levels) {
-    for (const lesson of level.lessons) {
-      const drill = lesson.drills.find(d => d.id === drillId)
-      if (drill) { found = { drill, lesson }; break }
-    }
-    if (found) break
-  }
+  const found = findDrill(instrument, drillId)
   if (!found) return null
 
   const { drill, lesson } = found

@@ -408,10 +408,11 @@ export function ChordTimeline({
           <div className="flex items-center rounded overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
             <button
               onClick={() => setMode('measures')}
-              className="text-[10px] font-mono px-2 py-1 transition-all"
+              className="text-[10px] font-mono px-3 py-1 transition-all"
               style={{
                 background: mode === 'measures' ? C.amberDim : 'transparent',
                 color: mode === 'measures' ? C.amber : C.textSec,
+                minHeight: 44,
               }}
               title="Quantize to measures (BPM grid)"
             >
@@ -419,10 +420,11 @@ export function ChordTimeline({
             </button>
             <button
               onClick={() => setMode('continuous')}
-              className="text-[10px] font-mono px-2 py-1 transition-all"
+              className="text-[10px] font-mono px-3 py-1 transition-all"
               style={{
                 background: mode === 'continuous' ? C.amberDim : 'transparent',
                 color: mode === 'continuous' ? C.amber : C.textSec,
+                minHeight: 44,
               }}
               title="Variable-width by detected segment duration"
             >
@@ -438,6 +440,7 @@ export function ChordTimeline({
               background: C.amberDim,
               color: C.amber,
               border: `1px solid ${C.amber}60`,
+              minHeight: 44,
             }}
           >
             Analyze chords
@@ -454,12 +457,13 @@ export function ChordTimeline({
         {analysisActive && (
           <button
             onClick={cancelAnalysis}
-            className="text-[10px] font-mono px-2 py-1 rounded transition-all"
+            className="text-[10px] font-mono px-3 py-1 rounded transition-all"
             style={{
               background: 'transparent',
               color: C.textSec,
               border: '1px solid rgba(255,255,255,0.15)',
               cursor: 'pointer',
+              minHeight: 44,
             }}
             title="분석 취소"
           >
@@ -474,8 +478,8 @@ export function ChordTimeline({
             {!hasExternalChords && youtubeId && (
               <button
                 onClick={runAnalysis}
-                className="text-[10px] font-mono px-2 py-1 rounded transition-all"
-                style={{ background: C.amberDim, color: C.amber, border: `1px solid ${C.amber}60`, cursor: 'pointer' }}
+                className="text-[10px] font-mono px-3 py-1 rounded transition-all"
+                style={{ background: C.amberDim, color: C.amber, border: `1px solid ${C.amber}60`, cursor: 'pointer', minHeight: 44 }}
               >
                 Retry
               </button>
@@ -489,8 +493,8 @@ export function ChordTimeline({
             </span>
             <button
               onClick={() => setRetryNonce((n) => n + 1)}
-              className="text-[10px] font-mono px-2 py-1 rounded transition-all"
-              style={{ background: C.amberDim, color: C.amber, border: `1px solid ${C.amber}60`, cursor: 'pointer' }}
+              className="text-[10px] font-mono px-3 py-1 rounded transition-all"
+              style={{ background: C.amberDim, color: C.amber, border: `1px solid ${C.amber}60`, cursor: 'pointer', minHeight: 44 }}
             >
               Retry
             </button>

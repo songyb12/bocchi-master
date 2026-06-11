@@ -16,6 +16,7 @@ import { HitFeedbackOverlay, useHitFeedback } from '@/features/tab-view/shared/H
 import { CountInOverlay } from '@/features/tab-view/shared/CountInOverlay'
 import { DEMO_TRACKS, CAGED_TRACKS, drillToTrack } from '@/core/note/TrackLoader'
 import { markDrillComplete } from '@/features/curriculum/progressStore'
+import { DrillContextBar } from '@/features/curriculum/DrillContextBar'
 import { usePlayback } from '@/hooks/usePlayback'
 import { useAudioInput } from '@/hooks/useAudioInput'
 import { useScoring } from '@/hooks/useScoring'
@@ -23,6 +24,7 @@ import type { Drill, Lesson } from '@/data/curriculum'
 import { AppRail } from './AppRail'
 import { BackToDashboard } from './BackToDashboard'
 import { PracticeHome } from './PracticeHome'
+import { ShortcutHelp } from './ShortcutHelp'
 
 type View = 'home' | 'play' | 'songs' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine' | 'results'
 
@@ -157,6 +159,8 @@ function AppContent() {
   return (
     <div className="min-h-screen flex" style={{ background: '#0a0a0a' }}>
       <BackToDashboard />
+      {/* U4 — shortcut help where the shortcuts actually apply (play/songs) */}
+      {(view === 'play' || view === 'songs') && <ShortcutHelp />}
       <AppRail
         active={view}
         onSelect={(id) => { setView(id); if (id !== 'play') scoring.reset() }}
@@ -237,6 +241,9 @@ function AppContent() {
                 })}
               </div>
             )}
+
+            {/* U3 — active curriculum drill context (lesson · pass criteria · done) */}
+            <DrillContextBar />
 
             {/* Tab View with overlays */}
             <div className="relative">

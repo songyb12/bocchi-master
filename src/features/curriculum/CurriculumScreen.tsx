@@ -521,7 +521,7 @@ function DrillRow({
   )
 }
 
-function formatPassCriteria(p: {
+export function formatPassCriteria(p: {
   minAccuracy?: number
   minBpm?: number
   minCorrectStreak?: number

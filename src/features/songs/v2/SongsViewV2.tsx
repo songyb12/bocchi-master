@@ -161,9 +161,10 @@ function OffsetBtn({
       onClick={onClick}
       className="transition-all"
       style={{
-        width: 24,
-        height: 24,
-        borderRadius: 6,
+        // 44px — iPad touch target (Apple HIG minimum)
+        width: 44,
+        height: 44,
+        borderRadius: 10,
         background: C.surface,
         color: C.textSec,
         border: `1px solid rgba(255,255,255,0.08)`,
@@ -172,7 +173,7 @@ function OffsetBtn({
         alignItems: 'center',
         justifyContent: 'center',
         fontFamily: 'monospace',
-        fontSize: 14,
+        fontSize: 18,
         fontWeight: 700,
         lineHeight: 1,
       }}
@@ -612,6 +613,7 @@ export function SongsViewV2() {
             color: C.amber,
             borderRadius: 10,
             padding: '6px 16px',
+            minHeight: 44,
             fontFamily: 'monospace',
             fontSize: '0.75rem',
             fontWeight: 700,
@@ -653,6 +655,7 @@ export function SongsViewV2() {
                 color: instrument === 'bass' ? C.amber : C.textSec,
                 borderRadius: 8,
                 padding: '6px 0',
+                minHeight: 44,
                 fontFamily: 'monospace',
                 fontSize: '0.75rem',
                 fontWeight: 700,
@@ -671,6 +674,7 @@ export function SongsViewV2() {
                 color: instrument === 'guitar' ? C.rose : C.textSec,
                 borderRadius: 8,
                 padding: '6px 0',
+                minHeight: 44,
                 fontFamily: 'monospace',
                 fontSize: '0.75rem',
                 fontWeight: 700,
@@ -1033,6 +1037,7 @@ export function SongsViewV2() {
                     border: `1px solid ${syncEnabled ? C.greenBd : 'rgba(255,255,255,0.07)'}`,
                     borderRadius: 8,
                     padding: '5px 12px',
+                    minHeight: 44,
                     fontFamily: 'monospace',
                     fontSize: '0.7rem',
                     fontWeight: 700,
@@ -1161,12 +1166,13 @@ export function SongsViewV2() {
                 </div>
                 <button
                   onClick={() => setShowTab((v) => !v)}
-                  className="px-2 py-1 rounded font-mono text-[10px] transition-all"
+                  className="px-3 py-1 rounded font-mono text-[10px] transition-all"
                   style={{
                     background: showTab ? 'rgba(251,188,0,0.15)' : '#181818',
                     color: showTab ? '#fbbc00' : '#888',
                     border: `1px solid ${showTab ? 'rgba(251,188,0,0.4)' : '#333'}`,
                     cursor: 'pointer',
+                    minHeight: 44,
                   }}
                 >
                   {showTab ? '▼ TAB hide' : '▸ TAB show'}

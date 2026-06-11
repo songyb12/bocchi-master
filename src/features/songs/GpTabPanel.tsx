@@ -166,8 +166,9 @@ export function GpTabPanel({ activeTrackId, onSelect }: Props) {
               title="라이브러리에서 제거"
               className="transition-all"
               style={{
-                padding: '6px 10px', color: '#555', background: 'transparent',
-                border: 'none', cursor: 'pointer', fontSize: 12, flexShrink: 0,
+                minWidth: 44, minHeight: 44, color: '#555', background: 'transparent',
+                border: 'none', cursor: 'pointer', fontSize: 13, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.color = '#ffb2be' }}
               onMouseLeave={(e) => { e.currentTarget.style.color = '#555' }}
@@ -220,6 +221,7 @@ export function GpTabPanel({ activeTrackId, onSelect }: Props) {
             fontFamily: 'monospace',
             fontSize: '0.65rem',
             padding: '8px 6px',
+            minHeight: 44,
             cursor: phase === 'uploading' ? 'wait' : 'pointer',
           }}
         >
