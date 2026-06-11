@@ -4,6 +4,13 @@
  * XP, 레벨, 업적, 칭호, 일일 미션 등 게임화 요소.
  * Life-Master의 게이미피케이션 시스템(27단계 RPG 칭호)을 참고하되
  * 음악/기타에 특화된 구조.
+ *
+ * @deprecated 2026-06-11 — dead code: never imported anywhere. The app's XP
+ * source of truth is `bocchi.progress.{instrument}` managed by
+ * src/features/curriculum/progressStore.ts (drill/lesson completion) and
+ * sessionEngine.awardCurriculumXP (session minutes). Recommendation: delete
+ * this file, or port achievements/titles onto progressStore if ever wanted.
+ * Kept pending user decision — do not wire new code against it.
  */
 
 // ─── Player Profile ─────────────────────────────────

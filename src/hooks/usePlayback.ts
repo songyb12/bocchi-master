@@ -23,7 +23,9 @@ export function usePlayback() {
         dispatch({ type: 'TICK', beat, measure })
       },
       onEnd: () => {
-        dispatch({ type: 'SET_STATUS', status: 'stopped' })
+        // Natural play-through end — distinguishable from manual stop so
+        // listeners (e.g. drill completion) can react to a full run.
+        dispatch({ type: 'TRACK_ENDED' })
       },
       onCountIn: (remaining) => {
         dispatch({ type: 'SET_COUNT_IN', remaining })

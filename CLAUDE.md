@@ -23,21 +23,27 @@ uvicorn main:app --app-dir server --host 0.0.0.0 --port 8081
 ## Project Structure
 ```
 src/
-  components/       # UI components by feature
-    song/           # Song chord search, chord sheet, live mode
-    metronome/      # Metronome panel, BPM slider, tap tempo
+  app/              # Shell: App (view router), AppRail, PracticeHome, BackToDashboard
+  features/         # UI by feature
+    songs/          # SongsViewV2, ChordTimeline, StemSeparator, StageMode, stages
+    tab-view/       # Tab renderers (B/A mode) + playback controls + scoring overlays
     fretboard/      # SVG fretboard rendering
-    scale/          # Scale selector, scale patterns
-    trainer/        # Quiz, drills, interval trainer
-    curriculum/     # Guided learning system
-    ...
-  hooks/            # Custom React hooks (useMetronome, useMidi, etc.)
-  data/             # Seed data, stores
-  types/            # TypeScript type definitions
-  utils/            # Utilities (transpose, audio, storage)
-  constants/        # Notes, tunings
+    curriculum/     # Guided learning system (lessons/drills)
+    learn/          # Bass tone workshop (SVG visualizations)
+    session/        # 30-min practice session harness
+    vocal/          # Vocal technique guide
+    routine/        # Daily routine templates (4 instruments)
+    audio-input/    # Mic input panel
+    settings/       # Settings UI
+  contexts/         # PlaybackContext (track/status/bpm/loop)
+  core/             # audio/ (engine, scheduler, pitch), note/ (tracks, loader), scoring/
+  hooks/            # usePlayback, useYouTubePlayer, useScoring, useAudioInput, ...
+  data/             # curriculum, scales, tunings, gamification
+  lib/              # AudioChord typed client + handoff (+ generated types)
+  types/ utils/ styles/ ui/
 server/
-  main.py           # Standalone FastAPI chord search server
+  main.py           # Standalone FastAPI server (chord-search + GP tab parse) — 현재 프론트 미연결
+  tab_parser.py     # Guitar Pro parser (PyGuitarPro)
 ```
 
 ## Key Features
@@ -50,8 +56,9 @@ server/
 - Curriculum system with gamification
 
 ## Environment Variables
-- `VITE_API_PORT` — Backend API port (default: 8080)
-- `CLAUDE_CLI_PATH` — Override Claude CLI binary path (auto-detected)
+- `VITE_AC_API_KEY` — AudioChord X-AC-Key auth header (see `.env.example`)
+- `VITE_AC_UI_URL` — Practice Home의 AudioChord UI 링크 (default: `http://100.111.55.55:8220/ui`)
+- `CLAUDE_CLI_PATH` — Override Claude CLI binary path for the optional server (auto-detected)
 
 ## Origin
 Extracted from UFS Master Core Ecosystem (`D:\Claude\01_UFS\frontend\bocchi-master\`).

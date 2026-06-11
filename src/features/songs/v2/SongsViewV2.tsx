@@ -451,7 +451,7 @@ export function SongsViewV2() {
     const isActive = selectedSong?.title === song.title
     const practiceTrack = getSongTrack(song)
     const hasPlayableTab = (practiceTrack?.events.length ?? 0) > 0
-    const badge = hasPlayableTab ? 'BASS TAB' : 'ROOTS'
+    const badge = hasPlayableTab ? (instrument === 'bass' ? 'BASS TAB' : 'TAB') : 'ROOTS'
     const rowAccent = variant === 'recent' ? C.green : variant === 'ready' ? C.rose : C.amber
 
     return (

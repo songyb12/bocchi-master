@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PlaybackProvider, usePlaybackState, usePlaybackDispatch } from '@/contexts/PlaybackContext'
 import { AudioContextProvider } from '@/core/audio/AudioContextProvider'
 import { TabView } from '@/features/tab-view/TabView'
@@ -15,6 +15,7 @@ import { SessionResults } from '@/features/tab-view/shared/SessionResults'
 import { HitFeedbackOverlay, useHitFeedback } from '@/features/tab-view/shared/HitFeedback'
 import { CountInOverlay } from '@/features/tab-view/shared/CountInOverlay'
 import { DEMO_TRACKS, CAGED_TRACKS, drillToTrack } from '@/core/note/TrackLoader'
+import { markDrillComplete } from '@/features/curriculum/progressStore'
 import { usePlayback } from '@/hooks/usePlayback'
 import { useAudioInput } from '@/hooks/useAudioInput'
 import { useScoring } from '@/hooks/useScoring'
@@ -26,14 +27,13 @@ import { PracticeHome } from './PracticeHome'
 type View = 'home' | 'play' | 'songs' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine' | 'results'
 
 function AppContent() {
-  const { track, currentBeat, status, bpm, mode } = usePlaybackState()
+  const { track, currentBeat, status, bpm, mode, endedCount } = usePlaybackState()
   const dispatch = usePlaybackDispatch()
   const { togglePlay, play, stop, setLoop } = usePlayback()
   const { isListening, pitch } = useAudioInput()
   const scoring = useScoring(track)
   const { items: feedbackItems, showFeedback } = useHitFeedback()
   const [view, setView] = useState<View>('home')
-  const [instrument] = useState<'guitar' | 'bass'>('bass')
   const [openCategory, setOpenCategory] = useState<string | null>(null)
 
   useEffect(() => {
@@ -118,11 +118,30 @@ function AppContent() {
     setView('play')
   }, [allTracks, dispatch])
 
-  const handleDrillSelect = useCallback((drill: Drill, _lesson: Lesson) => {
+  // Instrument comes from the curriculum being browsed — a guitar-curriculum
+  // drill renders on guitar tuning, a bass one on bass tuning.
+  const handleDrillSelect = useCallback((drill: Drill, _lesson: Lesson, instrument: 'guitar' | 'bass') => {
     const t = drillToTrack(drill, instrument)
     dispatch({ type: 'SET_TRACK', track: t })
     setView('play')
-  }, [dispatch, instrument])
+  }, [dispatch])
+
+  // Drill completion — fires only on a natural play-through end (engine onEnd
+  // → TRACK_ENDED), never on manual stop. A looped drill never ends, so it is
+  // not auto-completed. Idempotent: markDrillComplete ignores repeats.
+  const lastEndedCountRef = useRef(0)
+  useEffect(() => {
+    if (endedCount > lastEndedCountRef.current && track?.drillId) {
+      // Drill tracks carry the tuning they were generated with, so the string
+      // count identifies which curriculum's progress to credit.
+      const drillInstrument = track.tuning.stringCount === 4 ? 'bass' : 'guitar'
+      markDrillComplete(drillInstrument, track.drillId)
+      // TODO(stage 2): when mic data exists (scoring.results.length > 0), gate
+      // completion on drill.passCriteria (minAccuracy vs scoring.accuracy) and
+      // record per-drill best scores instead of completing on any full run.
+    }
+    lastEndedCountRef.current = endedCount
+  }, [endedCount, track])
 
   const handleRetry = useCallback(() => {
     scoring.reset()

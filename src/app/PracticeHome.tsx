@@ -1,5 +1,8 @@
 import type { CSSProperties } from 'react'
 
+// AudioChord web UI link — override via VITE_AC_UI_URL (Vite inlines at build time).
+const AC_UI_URL = (import.meta.env.VITE_AC_UI_URL as string | undefined) || 'http://100.111.55.55:8220/ui'
+
 type PracticeView = 'songs' | 'play' | 'curriculum' | 'learn' | 'session' | 'vocal' | 'routine'
 
 interface PracticeHomeProps {
@@ -145,7 +148,7 @@ export function PracticeHome({ onQuickStart, onOpen }: PracticeHomeProps) {
 
       <div className="practice-secondary-grid">
         <button onClick={onQuickStart}>트랙 바로 재생</button>
-        <button onClick={() => window.open('http://100.111.55.55:8220/ui', '_blank', 'noopener,noreferrer')}>AudioChord 가져오기</button>
+        <button onClick={() => window.open(AC_UI_URL, '_blank', 'noopener,noreferrer')}>AudioChord 가져오기</button>
         <button onClick={() => onOpen('learn')}>베이스 지식</button>
         <button onClick={() => onOpen('vocal')}>보컬 연습</button>
       </div>

@@ -14,6 +14,8 @@ interface PlaybackState {
   loopStart: number | null
   loopEnd: number | null
   countIn: number | null
+  /** Increments on natural play-through end (engine onEnd) — never on manual stop. */
+  endedCount: number
 }
 
 type PlaybackAction =
@@ -24,6 +26,7 @@ type PlaybackAction =
   | { type: 'SET_BPM'; bpm: number }
   | { type: 'SET_LOOP'; start: number | null; end: number | null }
   | { type: 'SET_COUNT_IN'; remaining: number | null }
+  | { type: 'TRACK_ENDED' }
   | { type: 'RESET' }
 
 const initialState: PlaybackState = {
@@ -36,6 +39,7 @@ const initialState: PlaybackState = {
   loopStart: null,
   loopEnd: null,
   countIn: null,
+  endedCount: 0,
 }
 
 function playbackReducer(state: PlaybackState, action: PlaybackAction): PlaybackState {
@@ -54,6 +58,8 @@ function playbackReducer(state: PlaybackState, action: PlaybackAction): Playback
       return { ...state, loopStart: action.start, loopEnd: action.end }
     case 'SET_COUNT_IN':
       return { ...state, countIn: action.remaining }
+    case 'TRACK_ENDED':
+      return { ...state, status: 'stopped', endedCount: state.endedCount + 1 }
     case 'RESET':
       return { ...initialState }
     default:

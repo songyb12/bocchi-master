@@ -15,9 +15,11 @@ import {
   type Lesson,
   type Drill,
 } from '@/data/curriculum'
+import { loadProgress } from './progressStore'
 
 interface Props {
-  onSelectDrill: (drill: Drill, lesson: Lesson) => void
+  /** instrument = the curriculum the drill belongs to (guitar/bass tuning). */
+  onSelectDrill: (drill: Drill, lesson: Lesson, instrument: 'guitar' | 'bass') => void
 }
 
 const DRILL_TYPE_LABEL: Record<string, string> = {
@@ -46,25 +48,9 @@ const DRILL_TYPE_ICON: Record<string, string> = {
   'progression-play': '\u{1F504}',
 }
 
-// R19 — light-weight progress reader from localStorage. Drill completion
-// writes are wired by drill components (separate change). Here we only read
-// + render the running totals so the user has visible feedback.
-const PROGRESS_KEY_PREFIX = 'bocchi.progress.'
-
-function loadProgress(instrument: 'guitar' | 'bass') {
-  try {
-    const raw = localStorage.getItem(PROGRESS_KEY_PREFIX + instrument)
-    if (!raw) return { xp: 0, completedLessons: [] as string[], completedDrills: [] as string[] }
-    const p = JSON.parse(raw)
-    return {
-      xp: typeof p.xp === 'number' ? p.xp : 0,
-      completedLessons: Array.isArray(p.completedLessons) ? p.completedLessons : [],
-      completedDrills: Array.isArray(p.completedDrills) ? p.completedDrills : [],
-    }
-  } catch {
-    return { xp: 0, completedLessons: [] as string[], completedDrills: [] as string[] }
-  }
-}
+// Progress is read from progressStore (`bocchi.progress.{instrument}`).
+// Drill completion is written by App on natural play-through end
+// (TRACK_ENDED → markDrillComplete); session minutes XP by sessionEngine.
 
 export function CurriculumScreen({ onSelectDrill }: Props) {
   const [instrument, setInstrument] = useState<'guitar' | 'bass'>('guitar')
@@ -154,24 +140,30 @@ export function CurriculumScreen({ onSelectDrill }: Props) {
           })}
         </div>
 
-        {/* Levels */}
+        {/* Levels — XP-gated: a level opens once cumulative XP reaches requiredXP */}
         <div className="flex flex-col gap-3">
-          {curriculum.levels.map((level, i) => (
-            <LevelCard
-              key={level.id}
-              level={level}
-              index={i}
-              isExpanded={expandedLevel === level.id}
-              expandedLesson={expandedLesson}
-              onToggle={() =>
-                setExpandedLevel(expandedLevel === level.id ? null : level.id)
-              }
-              onToggleLesson={(id) =>
-                setExpandedLesson(expandedLesson === id ? null : id)
-              }
-              onSelectDrill={onSelectDrill}
-            />
-          ))}
+          {curriculum.levels.map((level, i) => {
+            const unlocked = progress.xp >= level.requiredXP
+            return (
+              <LevelCard
+                key={level.id}
+                level={level}
+                index={i}
+                unlocked={unlocked}
+                completedDrills={progress.completedDrills}
+                completedLessons={progress.completedLessons}
+                isExpanded={unlocked && expandedLevel === level.id}
+                expandedLesson={expandedLesson}
+                onToggle={() =>
+                  setExpandedLevel(expandedLevel === level.id ? null : level.id)
+                }
+                onToggleLesson={(id) =>
+                  setExpandedLesson(expandedLesson === id ? null : id)
+                }
+                onSelectDrill={(drill, lesson) => onSelectDrill(drill, lesson, instrument)}
+              />
+            )
+          })}
         </div>
 
         <footer className="pt-6 pb-12" style={{ borderTop: '1px solid #1a1a1a' }}>
@@ -187,6 +179,9 @@ export function CurriculumScreen({ onSelectDrill }: Props) {
 interface LevelCardProps {
   level: Level
   index: number
+  unlocked: boolean
+  completedDrills: string[]
+  completedLessons: string[]
   isExpanded: boolean
   expandedLesson: string | null
   onToggle: () => void
@@ -197,6 +192,9 @@ interface LevelCardProps {
 function LevelCard({
   level,
   index,
+  unlocked,
+  completedDrills,
+  completedLessons,
   isExpanded,
   expandedLesson,
   onToggle,
@@ -212,11 +210,12 @@ function LevelCard({
         boxShadow: isExpanded ? '0 0 16px rgba(251,188,0,0.15)' : 'none',
       }}
     >
-      {/* Level header */}
+      {/* Level header — locked levels are not expandable */}
       <button
-        onClick={onToggle}
+        onClick={unlocked ? onToggle : undefined}
+        disabled={!unlocked}
         className="w-full flex items-center gap-4 px-5 py-4 text-left transition-colors"
-        style={{ cursor: 'pointer' }}
+        style={{ cursor: unlocked ? 'pointer' : 'default', opacity: unlocked ? 1 : 0.55 }}
       >
         <span style={{ fontSize: 28 }}>{level.icon}</span>
         <div className="flex-1">
@@ -243,8 +242,8 @@ function LevelCard({
           <span className="font-mono text-[10px]" style={{ color: '#fbbc00' }}>
             {level.lessons.length} LESSONS
           </span>
-          <span className="font-mono text-[9px]" style={{ color: '#666' }}>
-            {level.requiredXP > 0 ? `${level.requiredXP} XP req` : 'unlocked'}
+          <span className="font-mono text-[9px]" style={{ color: unlocked ? '#666' : '#a8821f' }}>
+            {unlocked ? 'unlocked' : `${level.requiredXP} XP req`}
           </span>
         </div>
         <span
@@ -255,7 +254,7 @@ function LevelCard({
             transform: isExpanded ? 'rotate(180deg)' : 'none',
           }}
         >
-          ▾
+          {unlocked ? '▾' : '🔒'}
         </span>
       </button>
 
@@ -274,6 +273,8 @@ function LevelCard({
                 key={lesson.id}
                 lesson={lesson}
                 index={li}
+                completedDrills={completedDrills}
+                lessonCompleted={completedLessons.includes(lesson.id)}
                 isExpanded={expandedLesson === lesson.id}
                 onToggle={() => onToggleLesson(lesson.id)}
                 onSelectDrill={onSelectDrill}
@@ -289,6 +290,8 @@ function LevelCard({
 interface LessonCardProps {
   lesson: Lesson
   index: number
+  completedDrills: string[]
+  lessonCompleted: boolean
   isExpanded: boolean
   onToggle: () => void
   onSelectDrill: (drill: Drill, lesson: Lesson) => void
@@ -297,6 +300,8 @@ interface LessonCardProps {
 function LessonCard({
   lesson,
   index,
+  completedDrills,
+  lessonCompleted,
   isExpanded,
   onToggle,
   onSelectDrill,
@@ -309,6 +314,7 @@ function LessonCard({
   })()
 
   const totalMinutes = lesson.drills.reduce((s, d) => s + (d.estimatedMinutes ?? 0), 0)
+  const doneCount = lesson.drills.filter((d) => completedDrills.includes(d.id)).length
 
   return (
     <div
@@ -331,6 +337,7 @@ function LessonCard({
             className="font-serif italic"
             style={{ color: '#fbbc00', fontSize: 15, fontWeight: 400 }}
           >
+            {lessonCompleted && <span style={{ color: '#7eff8b' }}>✓ </span>}
             {lesson.title}
           </div>
           {firstHeading && (
@@ -341,7 +348,7 @@ function LessonCard({
         </div>
         <div className="flex flex-col items-end gap-0.5">
           <span className="font-mono text-[9px]" style={{ color: '#fbbc0099' }}>
-            {lesson.drills.length} drills · {totalMinutes}min
+            {doneCount > 0 ? `${doneCount}/${lesson.drills.length}` : lesson.drills.length} drills · {totalMinutes}min
           </span>
           <span className="font-mono text-[9px]" style={{ color: '#7eff8b' }}>
             +{lesson.xpReward} XP
@@ -427,6 +434,7 @@ function LessonCard({
                   <DrillRow
                     key={drill.id}
                     drill={drill}
+                    completed={completedDrills.includes(drill.id)}
                     onSelect={() => onSelectDrill(drill, lesson)}
                   />
                 ))}
@@ -439,14 +447,23 @@ function LessonCard({
   )
 }
 
-function DrillRow({ drill, onSelect }: { drill: Drill; onSelect: () => void }) {
+function DrillRow({
+  drill,
+  completed,
+  onSelect,
+}: {
+  drill: Drill
+  completed: boolean
+  onSelect: () => void
+}) {
+  const restingBorder = completed ? 'rgba(126,255,139,0.35)' : '#222'
   return (
     <button
       onClick={onSelect}
       className="flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition-all"
       style={{
         background: '#141414',
-        border: '1px solid #222',
+        border: `1px solid ${restingBorder}`,
         cursor: 'pointer',
       }}
       onMouseEnter={(e) => {
@@ -454,7 +471,7 @@ function DrillRow({ drill, onSelect }: { drill: Drill; onSelect: () => void }) {
         e.currentTarget.style.background = '#181818'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = '#222'
+        e.currentTarget.style.borderColor = restingBorder
         e.currentTarget.style.background = '#141414'
       }}
     >
@@ -494,7 +511,7 @@ function DrillRow({ drill, onSelect }: { drill: Drill; onSelect: () => void }) {
       </div>
       <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
         <span className="font-mono text-[10px]" style={{ color: '#7eff8b' }}>
-          +{drill.xpReward} XP
+          {completed ? '✓ done' : `+${drill.xpReward} XP`}
         </span>
         <span className="font-mono text-[9px]" style={{ color: '#888' }}>
           ~{drill.estimatedMinutes}min
