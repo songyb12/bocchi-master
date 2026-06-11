@@ -45,6 +45,66 @@ export class AudioChordError extends Error {
   }
 }
 
+// ─── Classified fetch ────────────────────────────────────────────────────────
+// Opaque failures (TypeError / AbortError / 401) all looked the same to the
+// UI, so server-down vs auth vs timeout got collapsed into one state. acFetch
+// classifies them; other HTTP statuses (e.g. 404 = not ingested) pass through.
+
+export type ACFailureKind = "server-down" | "auth" | "timeout" | "aborted";
+
+export const AC_FAILURE_MESSAGES: Record<ACFailureKind, string> = {
+  "server-down": "AudioChord 서버(:8220)에 연결할 수 없습니다 — Servy에서 AudioChord 서비스 상태를 확인하세요.",
+  auth: "인증 실패(401/403) — .env의 VITE_AC_API_KEY 확인 후 재빌드(npm run build)하세요.",
+  timeout: "응답 시간 초과 — 서버나 GPU 워커가 바쁘거나 멈췄을 수 있습니다. 잠시 후 재시도하세요.",
+  aborted: "취소됨",
+};
+
+export class ACRequestError extends Error {
+  kind: ACFailureKind;
+  userMessage: string;
+  constructor(kind: ACFailureKind, userMessage = AC_FAILURE_MESSAGES[kind]) {
+    super(userMessage);
+    this.kind = kind;
+    this.userMessage = userMessage;
+  }
+}
+
+/**
+ * fetch + withAuth with a deadline and caller-cancellation. Throws
+ * ACRequestError('server-down' | 'auth' | 'timeout' | 'aborted'); any other
+ * response (including 4xx/5xx) is returned for the caller to interpret.
+ */
+export async function acFetch(
+  input: string,
+  init: RequestInit = {},
+  opts: { timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<Response> {
+  const { timeoutMs = 15_000, signal } = opts;
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutMs);
+  const onOuterAbort = () => ctrl.abort();
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener("abort", onOuterAbort);
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(input, { ...init, headers: withAuth(init.headers ?? {}), signal: ctrl.signal });
+  } catch {
+    if (signal?.aborted) throw new ACRequestError("aborted");
+    if (timedOut) throw new ACRequestError("timeout");
+    throw new ACRequestError("server-down");
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onOuterAbort);
+  }
+
+  if (res.status === 401 || res.status === 403) throw new ACRequestError("auth");
+  return res;
+}
+
 function toFormData(obj: Record<string, unknown>): FormData {
   const fd = new FormData();
   for (const [k, v] of Object.entries(obj)) {

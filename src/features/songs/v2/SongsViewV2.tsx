@@ -32,6 +32,8 @@ import { StemSeparator } from '../StemSeparator'
 import { StageMode } from '../StageMode'
 import { ChordTimeline } from '../ChordTimeline'
 import { StagesPanel } from '../StagesPanel'
+import { GpTabPanel } from '../GpTabPanel'
+import type { GpLibraryEntry } from '../gpLibrary'
 
 // ── Color tokens (Amplified Underground) ─────────────────────────────────────
 const C = {
@@ -197,6 +199,7 @@ export function SongsViewV2() {
   const [recentImports, setRecentImports] = useState<AudioChordPracticeHandoff[]>(() => loadRecentImports())
   const [importBpmInput, setImportBpmInput] = useState('')
   const [importKeyInput, setImportKeyInput] = useState('')
+  const [selectedGp, setSelectedGp] = useState<GpLibraryEntry | null>(null)
 
   // Per-song offset persistence — sync drift differs per video upload
   const offsetKey = selectedSong?.youtubeId ? `bocchi.offset.${selectedSong.youtubeId}` : null
@@ -272,6 +275,7 @@ export function SongsViewV2() {
 
     setImportedPractice(normalized)
     setSelectedSong(null)
+    setSelectedGp(null)
     setInstrument('bass')
     setSyncEnabled(false)
     setOffsetSec(0)
@@ -325,6 +329,7 @@ export function SongsViewV2() {
 
   const handleSongSelect = useCallback((song: SongEntry) => {
     setImportedPractice(null)
+    setSelectedGp(null)
     setSelectedSong(song)
     setRecentSongKeys(saveRecentSong(song))
     setSyncEnabled(true)
@@ -334,6 +339,17 @@ export function SongsViewV2() {
     const t = getSongTrack(song)
     if (t) dispatch({ type: 'SET_TRACK', track: t })
   }, [dispatch, getSongTrack])
+
+  // GP tab from the local library — pure TabView practice (no YouTube/chords).
+  const handleGpSelect = useCallback((entry: GpLibraryEntry) => {
+    setSelectedSong(null)
+    setImportedPractice(null)
+    setSelectedGp(entry)
+    setSyncEnabled(false)
+    dispatch({ type: 'SET_STATUS', status: 'stopped' })
+    dispatch({ type: 'TICK', beat: 0, measure: 0 })
+    dispatch({ type: 'SET_TRACK', track: entry.track })
+  }, [dispatch])
 
   const handleInstrumentToggle = useCallback((inst: 'guitar' | 'bass') => {
     setInstrument(inst)
@@ -348,9 +364,9 @@ export function SongsViewV2() {
     : []
 
   const isYTPlaying = ytState === YT_STATE.PLAYING
-  const hasPractice = !!selectedSong || !!importedPractice
+  const hasPractice = !!selectedSong || !!importedPractice || !!selectedGp
   const practiceBpm = importedPractice?.bpm ?? selectedSong?.bpm ?? bpm
-  const practiceKey = selectedSong?.key ?? importedPractice?.key ?? 'AUTO'
+  const practiceKey = selectedSong?.key ?? importedPractice?.key ?? (selectedGp ? 'TAB' : 'AUTO')
   const practiceCurrentTime = importedPractice
     ? Math.max(0, (currentBeat * 60) / Math.max(1, practiceBpm))
     : Math.max(0, ytTime - offsetSec)
@@ -787,6 +803,10 @@ export function SongsViewV2() {
                 </button>
               </div>
             )}
+            <GpTabPanel
+              activeTrackId={selectedGp?.track.id ?? null}
+              onSelect={handleGpSelect}
+            />
             {recentSongs.length > 0 && (
               <div>
                 <div
@@ -865,7 +885,7 @@ export function SongsViewV2() {
               >
                 <div>
                   <div style={{ fontFamily: 'monospace', fontSize: '0.6rem', color: C.textMut, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-                    {selectedSong ? 'Now Practicing' : 'AudioChord Import'}
+                    {selectedSong ? 'Now Practicing' : importedPractice ? 'AudioChord Import' : 'GP Tab'}
                   </div>
                   <div
                     style={{
@@ -877,10 +897,12 @@ export function SongsViewV2() {
                       marginTop: 2,
                     }}
                   >
-                    {selectedSong?.title ?? importedPractice?.title}
+                    {selectedSong?.title ?? importedPractice?.title ?? selectedGp?.track.title}
                   </div>
                   <div style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: C.textSec, marginTop: 2 }}>
-                    {selectedSong?.artist ?? `${importedPractice?.chords.length ?? 0} chord segments from AudioChord`}
+                    {selectedSong?.artist
+                      ?? (importedPractice ? `${importedPractice.chords.length} chord segments from AudioChord` : null)
+                      ?? (selectedGp ? `${selectedGp.artist ?? selectedGp.fileName} · ${selectedGp.track.events.length} notes` : null)}
                     {importedPractice?.truncated ? ' · trimmed for quick handoff' : ''}
                   </div>
                 </div>
@@ -1108,8 +1130,8 @@ export function SongsViewV2() {
           {/* ── Stage selector (PR-2: UI only; PR-3 wires generators) ───────────── */}
           {selectedSong && <StagesPanel />}
 
-          {/* ── Chord Timeline (AudioChord) ────────────────────────────────────── */}
-          {hasPractice && (
+          {/* ── Chord Timeline (AudioChord) — not for GP tabs (no chord source) ── */}
+          {(selectedSong || importedPractice) && (
             <ChordTimeline
               youtubeId={selectedSong?.youtubeId ?? null}
               currentTime={practiceCurrentTime}

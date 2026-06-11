@@ -13,6 +13,7 @@
  *   Esc    : exit Stage Mode
  *   m      : toggle song picker overlay
  *   b      : swap instrument bass <-> guitar
+ *   , / .  : sync offset −/+0.5s (persisted per song, shared with SongsView)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePlaybackState, usePlaybackDispatch } from '@/contexts/PlaybackContext'
@@ -49,9 +50,30 @@ export function StageMode({ onExit }: StageModeProps) {
   const [instrument, setInstrument] = useState<'bass' | 'guitar'>('bass')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [syncEnabled] = useState(true)
-  const [offsetSec] = useState(0)
+  const [offsetSec, setOffsetSec] = useState(0)
 
   const currentSong = flatSongs[songIdx]?.song ?? null
+
+  // Per-song sync offset — same `bocchi.offset.{youtubeId}` key as SongsView,
+  // so a drift calibrated at the desk carries over to the stage (and back).
+  const offsetKey = currentSong?.youtubeId ? `bocchi.offset.${currentSong.youtubeId}` : null
+  useEffect(() => {
+    if (!offsetKey) { setOffsetSec(0); return }
+    try {
+      const raw = localStorage.getItem(offsetKey)
+      const v = raw != null ? parseFloat(raw) : NaN
+      setOffsetSec(Number.isFinite(v) ? v : 0)
+    } catch { setOffsetSec(0) }
+  }, [offsetKey])
+
+  useEffect(() => {
+    if (!offsetKey) return
+    try { localStorage.setItem(offsetKey, String(offsetSec)) } catch { /* */ }
+  }, [offsetKey, offsetSec])
+
+  const nudgeOffset = useCallback((delta: number) => {
+    setOffsetSec(o => Math.max(-10, Math.min(60, Math.round((o + delta) * 10) / 10)))
+  }, [])
 
   const loadSongTrack = useCallback((song: SongEntry, inst: 'bass' | 'guitar') => {
     const trackId = inst === 'bass' ? song.bassTrackId : song.guitarTrackId
@@ -149,11 +171,13 @@ export function StageMode({ onExit }: StageModeProps) {
       if (e.code === 'Space')      return handled(() => togglePlay())
       if (e.code === 'KeyM')       return handled(() => setPickerOpen(true))
       if (e.code === 'KeyB')       return handled(() => setInstrument(i => i === 'bass' ? 'guitar' : 'bass'))
+      if (e.code === 'Comma')      return handled(() => nudgeOffset(-0.5))
+      if (e.code === 'Period')     return handled(() => nudgeOffset(0.5))
       if (e.code === 'Escape')     return handled(() => onExit())
     }
     window.addEventListener('keydown', handler, { capture: true })
     return () => window.removeEventListener('keydown', handler, { capture: true })
-  }, [pickerOpen, flatSongs.length, jumpMeasures, stepSong, togglePlay, onExit])
+  }, [pickerOpen, flatSongs.length, jumpMeasures, stepSong, togglePlay, onExit, nudgeOffset])
 
   const isYTPlaying = ytState === YT_STATE.PLAYING
   const totalMeasures = track?.measures.length ?? 0
@@ -283,6 +307,28 @@ export function StageMode({ onExit }: StageModeProps) {
             />
             Sync {syncEnabled ? 'ON' : 'OFF'} — {isYTPlaying ? 'playing' : 'paused'}
           </div>
+
+          {/* Sync offset — big touch/pointer targets for the Magic Remote */}
+          <div className="rounded-xl px-4 py-3 flex items-center justify-between"
+            style={{ background: '#1c1b1b' }}
+          >
+            <span className="text-xs uppercase tracking-widest" style={{ color: '#888' }}>Offset</span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => nudgeOffset(-0.5)}
+                className="rounded-lg px-5 py-2 text-2xl font-bold leading-none transition-all"
+                style={{ background: '#2a2a2a', color: '#fbbc00' }}
+              >−</button>
+              <span className="font-mono text-xl" style={{ color: '#fbbc00', minWidth: '5ch', textAlign: 'center' }}>
+                {offsetSec.toFixed(1)}s
+              </span>
+              <button
+                onClick={() => nudgeOffset(0.5)}
+                className="rounded-lg px-5 py-2 text-2xl font-bold leading-none transition-all"
+                style={{ background: '#2a2a2a', color: '#fbbc00' }}
+              >+</button>
+            </div>
+          </div>
         </aside>
       </main>
 
@@ -296,6 +342,7 @@ export function StageMode({ onExit }: StageModeProps) {
           <RemoteHint label="OK" desc="Play / Pause" />
           <RemoteHint label="M" desc="Song List" />
           <RemoteHint label="B" desc="Bass / Guitar" />
+          <RemoteHint label=", ." desc="Offset ±0.5s" />
           <RemoteHint label="Esc" desc="Exit Stage" />
         </div>
         <div className="text-xs font-mono" style={{ color: '#666' }}>

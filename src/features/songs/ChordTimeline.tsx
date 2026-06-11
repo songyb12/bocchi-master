@@ -12,7 +12,7 @@
  * Active cell (based on `currentTime`) is highlighted; auto-scrolls into view.
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { withAuth } from '@/lib/audiochord'
+import { acFetch, ACRequestError } from '@/lib/audiochord'
 import {
   type ChordSegment,
   type MeasureCell,
@@ -34,7 +34,9 @@ interface ChordsResponse {
 
 type ViewMode = 'continuous' | 'measures'
 
-type Phase = 'idle' | 'checking' | 'fetching' | 'ingesting' | 'analyzing' | 'ready' | 'unavailable' | 'error'
+// 'unavailable' = reachable but no cached analysis (normal → Analyze button)
+// 'unreachable' = cache check itself failed (server down / auth / timeout)
+type Phase = 'idle' | 'checking' | 'fetching' | 'ingesting' | 'analyzing' | 'ready' | 'unavailable' | 'unreachable' | 'error'
 
 /** Pull the root note (with sharps/flats Korean-rendered) from a Crema label. */
 function extractRoot(raw: string): string {
@@ -117,31 +119,36 @@ export function ChordTimeline({
   const [duration, setDuration] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<ViewMode>('measures')
+  const [retryNonce, setRetryNonce] = useState(0)
+  const [elapsedSec, setElapsedSec] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const activeIdxRef = useRef(-1)
+  const abortRef = useRef<AbortController | null>(null)
 
   const hasExternalChords = (externalChords?.length ?? 0) > 0
   const fileId = !hasExternalChords && youtubeId ? `yt_${youtubeId}` : null
   const beatsPerMeasure = timeSignature?.[0] ?? 4
   const canQuantize = !!bpm && bpm > 0
 
-  // Try to load cached chords.json for the current song
-  const loadCached = useCallback(async (id: string): Promise<boolean> => {
+  // Try to load cached chords.json for the current song.
+  // 'cached' = loaded · 'no-cache' = reachable but not analyzed yet ·
+  // ACRequestError = server down / auth / timeout (shown distinctly).
+  const loadCached = useCallback(async (id: string): Promise<'cached' | 'no-cache' | ACRequestError> => {
     try {
-      const metaRes = await fetch(`${API_BASE}/library/${id}`, { headers: withAuth() })
-      if (!metaRes.ok) return false
+      const metaRes = await acFetch(`${API_BASE}/library/${id}`, {}, { timeoutMs: 10_000 })
+      if (!metaRes.ok) return 'no-cache'
       const meta = await metaRes.json()
-      if (!meta.analyses?.includes('chords')) return false
+      if (!meta.analyses?.includes('chords')) return 'no-cache'
 
-      const fileRes = await fetch(`${API_BASE}/library/${id}/file/chords.json`, { headers: withAuth() })
-      if (!fileRes.ok) return false
+      const fileRes = await acFetch(`${API_BASE}/library/${id}/file/chords.json`, {}, { timeoutMs: 10_000 })
+      if (!fileRes.ok) return 'no-cache'
       const data: ChordsResponse = await fileRes.json()
       const segs = data.chords ?? data.segments ?? []
       setChords(segs)
       setDuration(data.duration_sec ?? 0)
-      return true
-    } catch {
-      return false
+      return 'cached'
+    } catch (e) {
+      return e instanceof ACRequestError ? e : 'no-cache'
     }
   }, [])
 
@@ -171,36 +178,45 @@ export function ChordTimeline({
     setChords([])
     activeIdxRef.current = -1
     ;(async () => {
-      const ok = await loadCached(fileId)
+      const result = await loadCached(fileId)
       if (cancelled) return
-      setPhase(ok ? 'ready' : 'unavailable')
+      if (result === 'cached') {
+        setPhase('ready')
+      } else if (result === 'no-cache') {
+        setPhase('unavailable')
+      } else {
+        setError(result.userMessage)
+        setPhase('unreachable')
+      }
     })()
     return () => { cancelled = true }
-  }, [fileId, loadCached, hasExternalChords, externalChords, externalDurationSec])
+  }, [fileId, loadCached, hasExternalChords, externalChords, externalDurationSec, retryNonce])
 
-  // Run analysis (ingest + analyze)
+  // Run analysis (ingest + analyze). Cancellable via the header ✕ button;
+  // per-stage deadlines so a hung worker surfaces as 'timeout' instead of
+  // waiting forever.
   const runAnalysis = useCallback(async () => {
     if (!youtubeId || !fileId) return
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
     try {
       setError(null)
       setPhase('ingesting')
       const ingestForm = new FormData()
       ingestForm.append('url', `https://www.youtube.com/watch?v=${youtubeId}`)
-      const ingestRes = await fetch(`${API_BASE}/ingest/youtube`, {
+      const ingestRes = await acFetch(`${API_BASE}/ingest/youtube`, {
         method: 'POST',
         body: ingestForm,
-        headers: withAuth(),
-      })
+      }, { timeoutMs: 180_000, signal: ctrl.signal })
       if (!ingestRes.ok) throw new Error(`Ingest HTTP ${ingestRes.status}`)
 
       setPhase('analyzing')
       const sepForm = new FormData()
       sepForm.append('file_id', fileId)
-      const anaRes = await fetch(`${API_BASE}/analyze/chords`, {
+      const anaRes = await acFetch(`${API_BASE}/analyze/chords`, {
         method: 'POST',
         body: sepForm,
-        headers: withAuth(),
-      })
+      }, { timeoutMs: 120_000, signal: ctrl.signal })
       if (!anaRes.ok) {
         const detail = await anaRes.text().catch(() => '')
         throw new Error(`Analyze HTTP ${anaRes.status}: ${detail.slice(0, 120)}`)
@@ -211,10 +227,36 @@ export function ChordTimeline({
       setDuration(data.duration_sec ?? 0)
       setPhase('ready')
     } catch (e) {
-      setError(String(e))
+      if (e instanceof ACRequestError && e.kind === 'aborted') {
+        // User cancel — back to the Analyze button, not an error state.
+        setError(null)
+        setPhase('unavailable')
+        return
+      }
+      setError(e instanceof ACRequestError ? e.userMessage : String(e))
       setPhase('error')
+    } finally {
+      abortRef.current = null
     }
   }, [youtubeId, fileId])
+
+  const cancelAnalysis = useCallback(() => abortRef.current?.abort(), [])
+
+  // Abort any in-flight analysis when the component unmounts (song switch etc.)
+  useEffect(() => () => abortRef.current?.abort(), [])
+
+  // Elapsed seconds across ingest + analyze (one continuous clock)
+  const analysisActive = phase === 'ingesting' || phase === 'analyzing'
+  useEffect(() => {
+    if (!analysisActive) return
+    setElapsedSec(0)
+    const startedAt = Date.now()
+    const id = window.setInterval(
+      () => setElapsedSec(Math.round((Date.now() - startedAt) / 1000)),
+      1000,
+    )
+    return () => window.clearInterval(id)
+  }, [analysisActive])
 
   // Continuous-mode active index (variable-width segment under playhead)
   const activeContinuousIdx = useMemo(() => {
@@ -405,14 +447,54 @@ export function ChordTimeline({
           <span className="text-[10px] font-mono" style={{ color: C.amber }}>
             <span className="inline-block animate-pulse mr-1">●</span>
             {phase === 'checking' ? 'Checking cache...'
-              : phase === 'ingesting' ? 'Downloading audio...'
-              : 'Analyzing on GPU (~10s)...'}
+              : phase === 'ingesting' ? `Downloading audio... ${elapsedSec}s`
+              : `Analyzing on GPU (~10s)... ${elapsedSec}s`}
           </span>
         )}
+        {analysisActive && (
+          <button
+            onClick={cancelAnalysis}
+            className="text-[10px] font-mono px-2 py-1 rounded transition-all"
+            style={{
+              background: 'transparent',
+              color: C.textSec,
+              border: '1px solid rgba(255,255,255,0.15)',
+              cursor: 'pointer',
+            }}
+            title="분석 취소"
+          >
+            ✕ Cancel
+          </button>
+        )}
         {phase === 'error' && (
-          <span className="text-[10px] font-mono" style={{ color: C.rose }}>
-            {error}
-          </span>
+          <>
+            <span className="text-[10px] font-mono" style={{ color: C.rose }}>
+              {error}
+            </span>
+            {!hasExternalChords && youtubeId && (
+              <button
+                onClick={runAnalysis}
+                className="text-[10px] font-mono px-2 py-1 rounded transition-all"
+                style={{ background: C.amberDim, color: C.amber, border: `1px solid ${C.amber}60`, cursor: 'pointer' }}
+              >
+                Retry
+              </button>
+            )}
+          </>
+        )}
+        {phase === 'unreachable' && (
+          <>
+            <span className="text-[10px] font-mono" style={{ color: C.rose }}>
+              {error}
+            </span>
+            <button
+              onClick={() => setRetryNonce((n) => n + 1)}
+              className="text-[10px] font-mono px-2 py-1 rounded transition-all"
+              style={{ background: C.amberDim, color: C.amber, border: `1px solid ${C.amber}60`, cursor: 'pointer' }}
+            >
+              Retry
+            </button>
+          </>
         )}
       </div>
 
