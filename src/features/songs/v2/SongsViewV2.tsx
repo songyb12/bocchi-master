@@ -13,8 +13,13 @@
  * Layout:
  *   Top bar: BocchiMaster brand (serif italic) + Stage Mode button
  *   Body: two-column
- *     Left (~30%): song list grouped by category
- *     Right (~70%): YouTube → sync bar → TabView → Fretboard → StemSeparator
+ *     Left (~30%): SongListSidebar (instrument toggle + GP tabs + song list)
+ *     Right (~70%): YouTube → SyncControlBar → ChordTimeline → TabView →
+ *                   Fretboard → StemSeparator
+ *
+ * Split modules (pure extractions — state/sync logic all lives here):
+ *   theme.ts · recentStore.ts · SongRow.tsx · ImportRow.tsx ·
+ *   SyncControlBar.tsx · ImportSettingsBar.tsx · SongListSidebar.tsx
  */
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { usePlaybackState, usePlaybackDispatch } from '@/contexts/PlaybackContext'
@@ -32,50 +37,20 @@ import { StemSeparator } from '../StemSeparator'
 import { StageMode } from '../StageMode'
 import { ChordTimeline } from '../ChordTimeline'
 import { StagesPanel } from '../StagesPanel'
-import { GpTabPanel } from '../GpTabPanel'
 import type { GpLibraryEntry } from '../gpLibrary'
-
-// ── Color tokens (Amplified Underground) ─────────────────────────────────────
-const C = {
-  bg:        '#0a0a0a',
-  surface:   '#1c1b1b',
-  surface2:  '#131313',
-  card:      '#161616',
-  amber:     '#fbbc00',
-  amberDim:  'rgba(251,188,0,0.12)',
-  amberBd:   'rgba(251,188,0,0.3)',
-  rose:      '#ffb2be',
-  roseDim:   'rgba(255,178,190,0.12)',
-  roseBd:    'rgba(255,178,190,0.3)',
-  green:     '#71dc8f',
-  greenDim:  'rgba(113,220,143,0.12)',
-  greenBd:   'rgba(113,220,143,0.3)',
-  textPri:   '#f0f0f0',
-  textSec:   '#888888',
-  textMut:   '#555555',
-  inset:     'inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.3)',
-} as const
-
-const RECENT_SONGS_KEY = 'bocchi.songs.recent'
-const RECENT_IMPORTS_KEY = 'bocchi.audiochord.recent'
-const MAX_RECENT_SONGS = 5
-const MAX_RECENT_IMPORTS = 4
+import { C } from './theme'
+import {
+  songKey,
+  loadRecentSongKeys,
+  saveRecentSong,
+  loadRecentImports,
+  saveRecentImport,
+} from './recentStore'
+import { SongListSidebar } from './SongListSidebar'
+import { SyncControlBar } from './SyncControlBar'
+import { ImportSettingsBar } from './ImportSettingsBar'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function formatTime(s: number) {
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${m}:${sec.toString().padStart(2, '0')}`
-}
-
-function songKey(song: SongEntry): string {
-  return `${song.artist}::${song.title}`
-}
-
-function handoffKey(handoff: AudioChordPracticeHandoff): string {
-  return handoff.fileId || `${handoff.title}::${handoff.durationSec ?? 0}`
-}
-
 function clampBpm(value: unknown): number | null {
   const n = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(n)) return null
@@ -85,102 +60,6 @@ function clampBpm(value: unknown): number | null {
 function normalizeKey(value: string): string | null {
   const key = value.trim().slice(0, 16)
   return key || null
-}
-
-function isStoredHandoff(value: unknown): value is AudioChordPracticeHandoff {
-  if (!value || typeof value !== 'object') return false
-  const handoff = value as AudioChordPracticeHandoff
-  return handoff.source === 'audiochord'
-    && typeof handoff.title === 'string'
-    && Array.isArray(handoff.chords)
-    && handoff.chords.length > 0
-}
-
-function loadRecentSongKeys(): string[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const parsed = JSON.parse(localStorage.getItem(RECENT_SONGS_KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-function saveRecentSong(song: SongEntry): string[] {
-  const next = [songKey(song), ...loadRecentSongKeys().filter(key => key !== songKey(song))]
-    .slice(0, MAX_RECENT_SONGS)
-  try { localStorage.setItem(RECENT_SONGS_KEY, JSON.stringify(next)) } catch { /* */ }
-  return next
-}
-
-function loadRecentImports(): AudioChordPracticeHandoff[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const parsed = JSON.parse(localStorage.getItem(RECENT_IMPORTS_KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed.filter(isStoredHandoff).slice(0, MAX_RECENT_IMPORTS) : []
-  } catch {
-    return []
-  }
-}
-
-function saveRecentImport(handoff: AudioChordPracticeHandoff): AudioChordPracticeHandoff[] {
-  const next = [handoff, ...loadRecentImports().filter(item => handoffKey(item) !== handoffKey(handoff))]
-    .slice(0, MAX_RECENT_IMPORTS)
-  try { localStorage.setItem(RECENT_IMPORTS_KEY, JSON.stringify(next)) } catch { /* */ }
-  return next
-}
-
-// ── Subcomponents ─────────────────────────────────────────────────────────────
-
-function SyncDot({ active, playing }: { active: boolean; playing: boolean }) {
-  const color = active && playing ? C.green : active ? C.amber : C.textMut
-  return (
-    <span
-      style={{
-        display: 'inline-block',
-        width: 7,
-        height: 7,
-        borderRadius: '50%',
-        background: color,
-        boxShadow: active && playing ? `0 0 6px ${C.green}` : 'none',
-        flexShrink: 0,
-      }}
-    />
-  )
-}
-
-function OffsetBtn({
-  label,
-  onClick,
-}: {
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="transition-all"
-      style={{
-        // 44px — iPad touch target (Apple HIG minimum)
-        width: 44,
-        height: 44,
-        borderRadius: 10,
-        background: C.surface,
-        color: C.textSec,
-        border: `1px solid rgba(255,255,255,0.08)`,
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'monospace',
-        fontSize: 18,
-        fontWeight: 700,
-        lineHeight: 1,
-      }}
-    >
-      {label}
-    </button>
-  )
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -397,167 +276,6 @@ export function SongsViewV2() {
     dispatch({ type: 'TICK', beat: Math.max(0, (seconds * bpmValue) / 60), measure: Math.floor(Math.max(0, (seconds * bpmValue) / 60) / 4) })
   }, [dispatch, importBpmInput, importKeyInput, importedPractice, practiceCurrentTime])
 
-  const renderImportRow = (handoff: AudioChordPracticeHandoff) => {
-    const isActive = importedPractice && handoffKey(importedPractice) === handoffKey(handoff)
-    return (
-      <button
-        key={`import-${handoffKey(handoff)}`}
-        onClick={() => loadImportedPractice(handoff)}
-        className="w-full text-left transition-all"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '10px 16px',
-          background: isActive ? C.amberDim : 'transparent',
-          borderLeft: isActive ? `3px solid ${C.amber}` : '3px solid transparent',
-          cursor: 'pointer',
-        }}
-      >
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: isActive ? C.amber : C.green,
-            opacity: isActive ? 1 : 0.7,
-            flexShrink: 0,
-          }}
-        />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: '0.85rem',
-              fontWeight: isActive ? 700 : 500,
-              color: isActive ? C.amber : C.textPri,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {handoff.title}
-          </div>
-          <div
-            style={{
-              fontFamily: 'monospace',
-              fontSize: '0.65rem',
-              color: C.textMut,
-              marginTop: 2,
-            }}
-          >
-            {handoff.chords.length} chords · {handoff.fileId ?? 'audio'}
-          </div>
-        </div>
-        <div
-          style={{
-            fontFamily: 'monospace',
-            fontSize: '0.62rem',
-            color: isActive ? C.amber : C.textMut,
-            textAlign: 'right',
-            flexShrink: 0,
-          }}
-        >
-          <div>{handoff.key ?? 'AUTO'}</div>
-          <div>{handoff.bpm ?? '-'}<span style={{ opacity: 0.6 }}>bpm</span></div>
-        </div>
-      </button>
-    )
-  }
-
-  const renderSongRow = (song: SongEntry, variant: 'default' | 'recent' | 'ready' = 'default') => {
-    const isActive = selectedSong?.title === song.title
-    const practiceTrack = getSongTrack(song)
-    const hasPlayableTab = (practiceTrack?.events.length ?? 0) > 0
-    const badge = hasPlayableTab ? (instrument === 'bass' ? 'BASS TAB' : 'TAB') : 'ROOTS'
-    const rowAccent = variant === 'recent' ? C.green : variant === 'ready' ? C.rose : C.amber
-
-    return (
-      <button
-        key={`${variant}-${songKey(song)}`}
-        onClick={() => handleSongSelect(song)}
-        className="w-full text-left transition-all"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '10px 16px',
-          background: isActive ? C.amberDim : 'transparent',
-          borderLeft: isActive ? `3px solid ${C.amber}` : '3px solid transparent',
-          cursor: 'pointer',
-        }}
-      >
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: isActive ? C.amber : rowAccent,
-            opacity: isActive ? 1 : 0.65,
-            flexShrink: 0,
-          }}
-        />
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontFamily: isActive ? 'Georgia, "Times New Roman", serif' : 'inherit',
-              fontStyle: isActive ? 'italic' : 'normal',
-              fontSize: '0.85rem',
-              fontWeight: isActive ? 700 : 500,
-              color: isActive ? C.amber : C.textPri,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {song.title}
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              fontFamily: 'monospace',
-              fontSize: '0.65rem',
-              color: C.textMut,
-              marginTop: 2,
-              minWidth: 0,
-            }}
-          >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {song.artist}
-            </span>
-            <span
-              style={{
-                color: hasPlayableTab ? C.green : C.textMut,
-                border: `1px solid ${hasPlayableTab ? C.greenBd : 'rgba(255,255,255,0.08)'}`,
-                borderRadius: 999,
-                padding: '1px 5px',
-                fontSize: '0.55rem',
-                flexShrink: 0,
-              }}
-            >
-              {badge}
-            </span>
-          </div>
-        </div>
-
-        <div
-          style={{
-            fontFamily: 'monospace',
-            fontSize: '0.62rem',
-            color: isActive ? C.amber : C.textMut,
-            textAlign: 'right',
-            flexShrink: 0,
-          }}
-        >
-          <div>{song.key}</div>
-          <div>{song.bpm}<span style={{ opacity: 0.6 }}>bpm</span></div>
-        </div>
-      </button>
-    )
-  }
-
   if (stageMode) {
     return <StageMode onExit={() => setStageMode(false)} />
   }
@@ -630,249 +348,21 @@ export function SongsViewV2() {
       <div className="bocchi-songs-body flex flex-1 gap-0 min-h-0">
 
         {/* ── LEFT: Song List ─────────────────────────────────────────────────── */}
-        <aside
-          className="bocchi-song-rail flex flex-col"
-          style={{
-            width: '300px',
-            minWidth: '220px',
-            maxWidth: '320px',
-            background: C.surface2,
-            borderRight: `1px solid rgba(255,255,255,0.06)`,
-            flexShrink: 0,
-          }}
-        >
-          {/* Instrument toggle */}
-          <div
-            className="flex gap-2 p-4"
-            style={{ borderBottom: `1px solid rgba(255,255,255,0.06)` }}
-          >
-            <button
-              onClick={() => handleInstrumentToggle('bass')}
-              className="flex-1 transition-all"
-              style={{
-                background: instrument === 'bass' ? C.amberDim : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${instrument === 'bass' ? C.amberBd : 'rgba(255,255,255,0.07)'}`,
-                color: instrument === 'bass' ? C.amber : C.textSec,
-                borderRadius: 8,
-                padding: '6px 0',
-                minHeight: 44,
-                fontFamily: 'monospace',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                letterSpacing: '0.05em',
-              }}
-            >
-              Bass
-            </button>
-            <button
-              onClick={() => handleInstrumentToggle('guitar')}
-              className="flex-1 transition-all"
-              style={{
-                background: instrument === 'guitar' ? C.roseDim : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${instrument === 'guitar' ? C.roseBd : 'rgba(255,255,255,0.07)'}`,
-                color: instrument === 'guitar' ? C.rose : C.textSec,
-                borderRadius: 8,
-                padding: '6px 0',
-                minHeight: 44,
-                fontFamily: 'monospace',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                letterSpacing: '0.05em',
-              }}
-            >
-              Guitar
-            </button>
-          </div>
-
-          {/* Song list header */}
-          <div
-            className="px-4 py-3"
-            style={{ borderBottom: `1px solid rgba(255,255,255,0.04)` }}
-          >
-            <span
-              style={{
-                fontFamily: 'Georgia, "Times New Roman", serif',
-                fontStyle: 'italic',
-                fontSize: '1.1rem',
-                fontWeight: 700,
-                color: C.amber,
-              }}
-            >
-              Song Selection
-            </span>
-            <p style={{ margin: '2px 0 0', fontFamily: 'monospace', fontSize: '0.65rem', color: C.textMut }}>
-              Pick your next rehearsal track
-            </p>
-          </div>
-
-          {/* Scrollable list */}
-          <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }}>
-            {recentImports.length > 0 && (
-              <div>
-                <div
-                  className="px-4 py-2"
-                  style={{
-                    fontFamily: 'monospace',
-                    fontSize: '0.6rem',
-                    color: C.green,
-                    letterSpacing: '0.2em',
-                    textTransform: 'uppercase',
-                    borderBottom: `1px solid rgba(255,255,255,0.04)`,
-                    marginTop: 8,
-                  }}
-                >
-                  Recent AudioChord
-                </div>
-                {recentImports.map(renderImportRow)}
-              </div>
-            )}
-            {importedPractice && (
-              <div>
-                <div
-                  className="px-4 py-2"
-                  style={{
-                    fontFamily: 'monospace',
-                    fontSize: '0.6rem',
-                    color: C.amber,
-                    letterSpacing: '0.2em',
-                    textTransform: 'uppercase',
-                    borderBottom: `1px solid rgba(255,255,255,0.04)`,
-                    marginTop: 8,
-                  }}
-                >
-                  AudioChord Import
-                </div>
-                <button
-                  className="w-full text-left"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '12px 16px',
-                    background: C.amberDim,
-                    borderLeft: `3px solid ${C.amber}`,
-                    cursor: 'default',
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: C.amber,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontFamily: 'Georgia, "Times New Roman", serif',
-                        fontStyle: 'italic',
-                        fontSize: '0.85rem',
-                        fontWeight: 700,
-                        color: C.amber,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {importedPractice.title}
-                    </div>
-                    <div
-                      style={{
-                        fontFamily: 'monospace',
-                        fontSize: '0.65rem',
-                        color: C.textMut,
-                        marginTop: 2,
-                      }}
-                    >
-                      {importedPractice.chords.length} chord segments
-                      {importedPractice.truncated ? ' · trimmed' : ''}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: 'monospace',
-                      fontSize: '0.62rem',
-                      color: C.amber,
-                      textAlign: 'right',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <div>AUTO</div>
-                    <div>{practiceBpm}<span style={{ opacity: 0.6 }}>bpm</span></div>
-                  </div>
-                </button>
-              </div>
-            )}
-            <GpTabPanel
-              activeTrackId={selectedGp?.track.id ?? null}
-              onSelect={handleGpSelect}
-            />
-            {recentSongs.length > 0 && (
-              <div>
-                <div
-                  className="px-4 py-2"
-                  style={{
-                    fontFamily: 'monospace',
-                    fontSize: '0.6rem',
-                    color: C.green,
-                    letterSpacing: '0.2em',
-                    textTransform: 'uppercase',
-                    borderBottom: `1px solid rgba(255,255,255,0.04)`,
-                    marginTop: 8,
-                  }}
-                >
-                  Recent Practice
-                </div>
-                {recentSongs.map(song => renderSongRow(song, 'recent'))}
-              </div>
-            )}
-            {bassReadySongs.length > 0 && (
-              <div>
-                <div
-                  className="px-4 py-2"
-                  style={{
-                    fontFamily: 'monospace',
-                    fontSize: '0.6rem',
-                    color: C.rose,
-                    letterSpacing: '0.2em',
-                    textTransform: 'uppercase',
-                    borderBottom: `1px solid rgba(255,255,255,0.04)`,
-                    marginTop: 8,
-                  }}
-                >
-                  Bass-ready Tabs
-                </div>
-                {bassReadySongs.map(song => renderSongRow(song, 'ready'))}
-              </div>
-            )}
-            {SONG_CATEGORIES.map(cat => (
-              <div key={cat.name}>
-                {/* Category label */}
-                <div
-                  className="px-4 py-2"
-                  style={{
-                    fontFamily: 'monospace',
-                    fontSize: '0.6rem',
-                    color: C.textMut,
-                    letterSpacing: '0.2em',
-                    textTransform: 'uppercase',
-                    borderBottom: `1px solid rgba(255,255,255,0.04)`,
-                    marginTop: 8,
-                  }}
-                >
-                  {cat.name}
-                </div>
-
-                {/* Song rows */}
-                {cat.songs.map(song => renderSongRow(song))}
-              </div>
-            ))}
-          </div>
-        </aside>
+        <SongListSidebar
+          instrument={instrument}
+          selectedSong={selectedSong}
+          importedPractice={importedPractice}
+          selectedGpTrackId={selectedGp?.track.id ?? null}
+          practiceBpm={practiceBpm}
+          recentSongs={recentSongs}
+          recentImports={recentImports}
+          bassReadySongs={bassReadySongs}
+          getSongTrack={getSongTrack}
+          onToggleInstrument={handleInstrumentToggle}
+          onSelectSong={handleSongSelect}
+          onSelectImport={loadImportedPractice}
+          onSelectGp={handleGpSelect}
+        />
 
         {/* ── RIGHT: Main practice area ────────────────────────────────────────── */}
         <main className="bocchi-song-main flex-1 flex flex-col gap-6 p-6 overflow-y-auto min-w-0">
@@ -923,86 +413,14 @@ export function SongsViewV2() {
               </div>
 
               {importedPractice && (
-                <div
-                  className="flex items-center gap-3 rounded-2xl px-5 py-3 flex-wrap"
-                  style={{
-                    background: C.surface,
-                    boxShadow: C.inset,
-                    border: `1px solid rgba(113,220,143,0.16)`,
-                  }}
-                >
-                  <span style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: C.green, fontWeight: 700 }}>
-                    IMPORT SETTINGS
-                  </span>
-                  <label className="flex items-center gap-2" style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: C.textSec }}>
-                    BPM
-                    <input
-                      value={importBpmInput}
-                      onChange={(event) => setImportBpmInput(event.target.value)}
-                      inputMode="decimal"
-                      style={{
-                        width: 76,
-                        height: 30,
-                        borderRadius: 7,
-                        border: `1px solid rgba(255,255,255,0.1)`,
-                        background: C.surface2,
-                        color: C.textPri,
-                        padding: '0 8px',
-                      }}
-                    />
-                  </label>
-                  <label className="flex items-center gap-2" style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: C.textSec }}>
-                    KEY
-                    <input
-                      value={importKeyInput}
-                      onChange={(event) => setImportKeyInput(event.target.value)}
-                      placeholder="Em"
-                      style={{
-                        width: 70,
-                        height: 30,
-                        borderRadius: 7,
-                        border: `1px solid rgba(255,255,255,0.1)`,
-                        background: C.surface2,
-                        color: C.textPri,
-                        padding: '0 8px',
-                      }}
-                    />
-                  </label>
-                  <button
-                    onClick={() => applyImportedSettings()}
-                    style={{
-                      minHeight: 30,
-                      borderRadius: 7,
-                      border: `1px solid ${C.greenBd}`,
-                      background: C.greenDim,
-                      color: C.green,
-                      fontFamily: 'monospace',
-                      fontSize: '0.68rem',
-                      fontWeight: 700,
-                      padding: '0 10px',
-                    }}
-                  >
-                    Apply
-                  </button>
-                  {matchedImportSong && (
-                    <button
-                      onClick={() => applyImportedSettings({ bpm: matchedImportSong.bpm, key: matchedImportSong.key })}
-                      style={{
-                        minHeight: 30,
-                        borderRadius: 7,
-                        border: `1px solid ${C.amberBd}`,
-                        background: C.amberDim,
-                        color: C.amber,
-                        fontFamily: 'monospace',
-                        fontSize: '0.68rem',
-                        fontWeight: 700,
-                        padding: '0 10px',
-                      }}
-                    >
-                      Use catalog {matchedImportSong.bpm}bpm / {matchedImportSong.key}
-                    </button>
-                  )}
-                </div>
+                <ImportSettingsBar
+                  bpmInput={importBpmInput}
+                  keyInput={importKeyInput}
+                  onBpmInputChange={setImportBpmInput}
+                  onKeyInputChange={setImportKeyInput}
+                  onApply={applyImportedSettings}
+                  matchedSong={matchedImportSong}
+                />
               )}
 
               {/* YouTube embed card */}
@@ -1021,75 +439,17 @@ export function SongsViewV2() {
 
               {/* Sync controls bar */}
               {selectedSong ? (
-                <div
-                  className="flex items-center gap-4 rounded-2xl px-5 py-3"
-                  style={{
-                    background: C.surface,
-                    boxShadow: C.inset,
-                  }}
-                >
-                {/* Sync toggle */}
-                <button
-                  onClick={() => setSyncEnabled(!syncEnabled)}
-                  className="flex items-center gap-2 transition-all"
-                  style={{
-                    background: syncEnabled ? C.greenDim : 'rgba(255,255,255,0.04)',
-                    border: `1px solid ${syncEnabled ? C.greenBd : 'rgba(255,255,255,0.07)'}`,
-                    borderRadius: 8,
-                    padding: '5px 12px',
-                    minHeight: 44,
-                    fontFamily: 'monospace',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    color: syncEnabled ? C.green : C.textMut,
-                    cursor: 'pointer',
-                    gap: 6,
-                  }}
-                >
-                  <SyncDot active={syncEnabled} playing={isYTPlaying} />
-                  SYNC
-                </button>
-
-                {/* Separator */}
-                <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)' }} />
-
-                {/* Offset control */}
-                <div className="flex items-center gap-2">
-                  <span style={{ fontFamily: 'monospace', fontSize: '0.65rem', color: C.textMut }}>OFFSET</span>
-                  <OffsetBtn label="-" onClick={() => setOffsetSec(o => Math.max(-10, o - 0.5))} />
-                  <span
-                    style={{
-                      fontFamily: 'monospace',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      color: C.amber,
-                      minWidth: '4ch',
-                      textAlign: 'center',
-                    }}
-                  >
-                    {offsetSec.toFixed(1)}s
-                  </span>
-                  <OffsetBtn label="+" onClick={() => setOffsetSec(o => Math.min(60, o + 0.5))} />
-                </div>
-
-                {/* Time + beat display */}
-                <div className="ml-auto flex items-center gap-4">
-                  <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: C.textMut }}>
-                    {formatTime(ytTime)}
-                  </span>
-                  {syncEnabled && (
-                    <span
-                      style={{
-                        fontFamily: 'monospace',
-                        fontSize: '0.7rem',
-                        color: isYTPlaying ? C.green : C.amber,
-                      }}
-                    >
-                      beat {currentBeat.toFixed(1)}
-                    </span>
-                  )}
-                </div>
-                </div>
+                <SyncControlBar
+                  syncEnabled={syncEnabled}
+                  onToggleSync={() => setSyncEnabled(!syncEnabled)}
+                  offsetSec={offsetSec}
+                  onOffsetDelta={(delta) =>
+                    setOffsetSec(o => delta < 0 ? Math.max(-10, o + delta) : Math.min(60, o + delta))
+                  }
+                  ytTime={ytTime}
+                  currentBeat={currentBeat}
+                  isYTPlaying={isYTPlaying}
+                />
               ) : (
                 <div
                   className="rounded-2xl px-5 py-3"

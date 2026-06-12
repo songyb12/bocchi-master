@@ -10,9 +10,12 @@
  *                 One cell per measure with the time-weighted dominant chord.
  *
  * Active cell (based on `currentTime`) is highlighted; auto-scrolls into view.
+ *
+ * Split modules (pure extractions — quantization/active-index/auto-scroll
+ * stay here): useChordAnalysis.ts (fetch/phase state machine) ·
+ * chordDisplay.ts (labels + tokens) · ContinuousRow.tsx · MeasureGrid.tsx
  */
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { acFetch, ACRequestError } from '@/lib/audiochord'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   type ChordSegment,
   type MeasureCell,
@@ -20,70 +23,12 @@ import {
   quantizeToMeasures,
   trimSilenceCells,
 } from './chordQuantize'
-
-const API_BASE = '/api/v1'
-
-interface ChordsResponse {
-  file_id: string
-  elapsed_sec: number
-  duration_sec: number
-  model: string
-  chords?: ChordSegment[]
-  segments?: ChordSegment[]
-}
+import { useChordAnalysis } from './useChordAnalysis'
+import { C, extractRoot, normalizeLabel } from './chordDisplay'
+import { ContinuousRow } from './ContinuousRow'
+import { MeasureGrid } from './MeasureGrid'
 
 type ViewMode = 'continuous' | 'measures'
-
-// 'unavailable' = reachable but no cached analysis (normal → Analyze button)
-// 'unreachable' = cache check itself failed (server down / auth / timeout)
-type Phase = 'idle' | 'checking' | 'fetching' | 'ingesting' | 'analyzing' | 'ready' | 'unavailable' | 'unreachable' | 'error'
-
-/** Pull the root note (with sharps/flats Korean-rendered) from a Crema label. */
-function extractRoot(raw: string): string {
-  if (!raw || raw === 'N' || raw === 'X') return ''
-  const [rootPart] = raw.split(':')
-  return rootPart.replace(/#/g, '♯').replace(/b/g, '♭')
-}
-
-// Crema labels: "A#:maj", "F#:min7", "C:7", "G#:maj/3", "N" (no chord)
-function normalizeLabel(raw: string): string {
-  if (!raw || raw === 'N' || raw === 'X') return '—'
-  const [rootPart, qualityPart = ''] = raw.split(':')
-  const root = rootPart.replace(/#/g, '♯').replace(/b/g, '♭')
-  const [quality, slash] = qualityPart.split('/')
-  let suffix = ''
-  switch (quality) {
-    case 'maj':   suffix = ''; break
-    case 'min':   suffix = 'm'; break
-    case 'min7':  suffix = 'm7'; break
-    case 'maj7':  suffix = 'maj7'; break
-    case '7':     suffix = '7'; break
-    case 'min6':  suffix = 'm6'; break
-    case 'maj6':  suffix = '6'; break
-    case 'dim':   suffix = '°'; break
-    case 'aug':   suffix = '+'; break
-    case 'sus4':  suffix = 'sus4'; break
-    case 'sus2':  suffix = 'sus2'; break
-    case 'min9':  suffix = 'm9'; break
-    case 'maj9':  suffix = 'maj9'; break
-    case '9':     suffix = '9'; break
-    case '':      suffix = ''; break
-    default:      suffix = quality
-  }
-  return slash ? `${root}${suffix}/${slash}` : `${root}${suffix}`
-}
-
-const C = {
-  surface:  '#1c1b1b',
-  surface2: '#131313',
-  amber:    '#fbbc00',
-  amberDim: 'rgba(251,188,0,0.12)',
-  rose:     '#ffb2be',
-  green:    '#71dc8f',
-  textPri:  '#f0f0f0',
-  textSec:  '#888888',
-  textMut:  '#555555',
-}
 
 export function ChordTimeline({
   youtubeId,
@@ -114,149 +59,32 @@ export function ChordTimeline({
   externalDurationSec?: number
   externalTitle?: string
 }) {
-  const [phase, setPhase] = useState<Phase>('idle')
-  const [chords, setChords] = useState<ChordSegment[]>([])
-  const [duration, setDuration] = useState(0)
-  const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<ViewMode>('measures')
-  const [retryNonce, setRetryNonce] = useState(0)
-  const [elapsedSec, setElapsedSec] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const activeIdxRef = useRef(-1)
-  const abortRef = useRef<AbortController | null>(null)
 
   const hasExternalChords = (externalChords?.length ?? 0) > 0
   const fileId = !hasExternalChords && youtubeId ? `yt_${youtubeId}` : null
   const beatsPerMeasure = timeSignature?.[0] ?? 4
   const canQuantize = !!bpm && bpm > 0
 
-  // Try to load cached chords.json for the current song.
-  // 'cached' = loaded · 'no-cache' = reachable but not analyzed yet ·
-  // ACRequestError = server down / auth / timeout (shown distinctly).
-  const loadCached = useCallback(async (id: string): Promise<'cached' | 'no-cache' | ACRequestError> => {
-    try {
-      const metaRes = await acFetch(`${API_BASE}/library/${id}`, {}, { timeoutMs: 10_000 })
-      if (!metaRes.ok) return 'no-cache'
-      const meta = await metaRes.json()
-      if (!meta.analyses?.includes('chords')) return 'no-cache'
+  // Fetch/phase state machine (cache lookup, ingest+analyze, cancel, elapsed)
+  const {
+    phase,
+    chords,
+    duration,
+    error,
+    elapsedSec,
+    analysisActive,
+    runAnalysis,
+    cancelAnalysis,
+    retryCacheCheck,
+  } = useChordAnalysis({ youtubeId, fileId, hasExternalChords, externalChords, externalDurationSec })
 
-      const fileRes = await acFetch(`${API_BASE}/library/${id}/file/chords.json`, {}, { timeoutMs: 10_000 })
-      if (!fileRes.ok) return 'no-cache'
-      const data: ChordsResponse = await fileRes.json()
-      const segs = data.chords ?? data.segments ?? []
-      setChords(segs)
-      setDuration(data.duration_sec ?? 0)
-      return 'cached'
-    } catch (e) {
-      return e instanceof ACRequestError ? e : 'no-cache'
-    }
-  }, [])
-
-  // On youtubeId change, check for cached result
-  useEffect(() => {
-    if (hasExternalChords) {
-      const segs = externalChords ?? []
-      setPhase('ready')
-      setError(null)
-      setChords(segs)
-      setDuration(
-        externalDurationSec && externalDurationSec > 0
-          ? externalDurationSec
-          : Math.max(0, ...segs.map((seg) => seg.end)),
-      )
-      activeIdxRef.current = -1
-      return
-    }
-    if (!fileId) {
-      setPhase('idle')
-      setChords([])
-      return
-    }
-    let cancelled = false
-    setPhase('checking')
-    setError(null)
-    setChords([])
-    activeIdxRef.current = -1
-    ;(async () => {
-      const result = await loadCached(fileId)
-      if (cancelled) return
-      if (result === 'cached') {
-        setPhase('ready')
-      } else if (result === 'no-cache') {
-        setPhase('unavailable')
-      } else {
-        setError(result.userMessage)
-        setPhase('unreachable')
-      }
-    })()
-    return () => { cancelled = true }
-  }, [fileId, loadCached, hasExternalChords, externalChords, externalDurationSec, retryNonce])
-
-  // Run analysis (ingest + analyze). Cancellable via the header ✕ button;
-  // per-stage deadlines so a hung worker surfaces as 'timeout' instead of
-  // waiting forever.
-  const runAnalysis = useCallback(async () => {
-    if (!youtubeId || !fileId) return
-    const ctrl = new AbortController()
-    abortRef.current = ctrl
-    try {
-      setError(null)
-      setPhase('ingesting')
-      const ingestForm = new FormData()
-      ingestForm.append('url', `https://www.youtube.com/watch?v=${youtubeId}`)
-      const ingestRes = await acFetch(`${API_BASE}/ingest/youtube`, {
-        method: 'POST',
-        body: ingestForm,
-      }, { timeoutMs: 180_000, signal: ctrl.signal })
-      if (!ingestRes.ok) throw new Error(`Ingest HTTP ${ingestRes.status}`)
-
-      setPhase('analyzing')
-      const sepForm = new FormData()
-      sepForm.append('file_id', fileId)
-      const anaRes = await acFetch(`${API_BASE}/analyze/chords`, {
-        method: 'POST',
-        body: sepForm,
-      }, { timeoutMs: 120_000, signal: ctrl.signal })
-      if (!anaRes.ok) {
-        const detail = await anaRes.text().catch(() => '')
-        throw new Error(`Analyze HTTP ${anaRes.status}: ${detail.slice(0, 120)}`)
-      }
-      const data: ChordsResponse = await anaRes.json()
-      const segs = data.chords ?? data.segments ?? []
-      setChords(segs)
-      setDuration(data.duration_sec ?? 0)
-      setPhase('ready')
-    } catch (e) {
-      if (e instanceof ACRequestError && e.kind === 'aborted') {
-        // User cancel — back to the Analyze button, not an error state.
-        setError(null)
-        setPhase('unavailable')
-        return
-      }
-      setError(e instanceof ACRequestError ? e.userMessage : String(e))
-      setPhase('error')
-    } finally {
-      abortRef.current = null
-    }
-  }, [youtubeId, fileId])
-
-  const cancelAnalysis = useCallback(() => abortRef.current?.abort(), [])
-
-  // Abort any in-flight analysis when the component unmounts (song switch etc.)
-  useEffect(() => () => abortRef.current?.abort(), [])
-
-  // Elapsed seconds across ingest + analyze (one continuous clock)
-  const analysisActive = phase === 'ingesting' || phase === 'analyzing'
-  useEffect(() => {
-    if (!analysisActive) return
-    setElapsedSec(0)
-    const startedAt = Date.now()
-    const id = window.setInterval(
-      () => setElapsedSec(Math.round((Date.now() - startedAt) / 1000)),
-      1000,
-    )
-    return () => window.clearInterval(id)
-  }, [analysisActive])
+  // Reset auto-scroll memory whenever the chord set changes (song switch,
+  // external handoff, fresh analysis) — was inline in the fetch effect before
+  // the hook extraction.
+  useEffect(() => { activeIdxRef.current = -1 }, [chords])
 
   // Continuous-mode active index (variable-width segment under playhead)
   const activeContinuousIdx = useMemo(() => {
@@ -492,7 +320,7 @@ export function ChordTimeline({
               {error}
             </span>
             <button
-              onClick={() => setRetryNonce((n) => n + 1)}
+              onClick={retryCacheCheck}
               className="text-[10px] font-mono px-3 py-1 rounded transition-all"
               style={{ background: C.amberDim, color: C.amber, border: `1px solid ${C.amber}60`, cursor: 'pointer', minHeight: 44 }}
             >
@@ -503,163 +331,24 @@ export function ChordTimeline({
       </div>
 
       {phase === 'ready' && mode === 'continuous' && visibleChords.length > 0 && (
-        <div
-          ref={scrollRef}
-          className="overflow-x-auto"
-          style={{ paddingBottom: 4 }}
-        >
-          <div className="flex items-stretch gap-1" style={{ minHeight: 56 }}>
-            {visibleChords.map((seg, i) => {
-              const origIdx = chords.indexOf(seg)
-              const isActive = origIdx === activeIdx
-              const isNoChord = seg.label === 'N'
-              const dur = Math.max(0.5, seg.end - seg.start)
-              // px scaling: 28px per second, min 44px, max 240px
-              const width = Math.max(44, Math.min(240, dur * 28))
-              const conf = seg.confidence
-              const dimByConf = 0.4 + Math.min(1, conf) * 0.6 // 0.4–1.0
-              return (
-                <div
-                  key={`${seg.start}-${i}`}
-                  data-seg-idx={origIdx}
-                  onClick={() => onSeek?.(seg.start)}
-                  className="rounded flex flex-col items-center justify-center flex-shrink-0 transition-all"
-                  style={{
-                    width,
-                    background: isActive ? C.amber : isNoChord ? C.surface2 : '#222',
-                    color: isActive ? '#000' : isNoChord ? C.textMut : C.textPri,
-                    border: isActive ? `1px solid ${C.amber}` : `1px solid rgba(255,255,255,0.06)`,
-                    boxShadow: isActive ? `0 0 12px ${C.amber}80` : 'none',
-                    opacity: isActive ? 1 : isNoChord ? 0.5 : dimByConf,
-                    cursor: onSeek ? 'pointer' : 'default',
-                    fontFamily: 'monospace',
-                    padding: '6px 4px',
-                  }}
-                  title={`${seg.start.toFixed(2)}s – ${seg.end.toFixed(2)}s · conf ${conf.toFixed(2)}`}
-                >
-                  <span style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.1 }}>
-                    {normalizeLabel(seg.label)}
-                  </span>
-                  {!isNoChord && extractRoot(seg.label) && width > 50 && (
-                    <span
-                      style={{
-                        fontSize: 9,
-                        marginTop: 2,
-                        color: isActive ? '#000' : '#7eff8b',
-                        opacity: isActive ? 0.7 : 0.85,
-                        fontWeight: 600,
-                      }}
-                    >
-                      ♭{extractRoot(seg.label)}
-                    </span>
-                  )}
-                  <span style={{ fontSize: 9, opacity: 0.65, marginTop: 2 }}>
-                    {dur.toFixed(1)}s
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+        <ContinuousRow
+          chords={chords}
+          visibleChords={visibleChords}
+          activeIdx={activeIdx}
+          onSeek={onSeek}
+          scrollRef={scrollRef}
+        />
       )}
 
       {phase === 'ready' && mode === 'measures' && visibleMeasures.length > 0 && (
-        <div
-          ref={scrollRef}
-          className="overflow-x-auto"
-          style={{ paddingBottom: 4 }}
-        >
-          <div className="flex items-stretch" style={{ minHeight: 56 }}>
-            {visibleMeasures.map((cell) => {
-              const isActive = cell.index === activeIdx
-              const isNoChord = cell.label === 'N' || cell.label === 'X'
-              const conf = cell.confidence
-              const dimByConf = 0.4 + Math.min(1, conf) * 0.6
-              const ambiguous = cell.contributions.length > 1 && cell.contributions[0].label !== 'N'
-                && cell.contributions[1] && cell.contributions[1].label !== 'N'
-                && cell.contributions[1].durationInMeasure / Math.max(0.001, cell.contributions[0].durationInMeasure) > 0.6
-              return (
-                <div
-                  key={cell.index}
-                  data-seg-idx={cell.index}
-                  onClick={() => onSeek?.(cell.start)}
-                  className="flex flex-col items-center justify-center flex-shrink-0 transition-all relative"
-                  style={{
-                    width: 88,
-                    background: isActive ? C.amber : isNoChord ? C.surface2 : '#222',
-                    color: isActive ? '#000' : isNoChord ? C.textMut : C.textPri,
-                    border: isActive ? `1px solid ${C.amber}` : `1px solid rgba(255,255,255,0.08)`,
-                    borderLeft: cell.index === measureTrim.lo
-                      ? `1px solid rgba(255,255,255,0.08)`
-                      : `2px solid rgba(255,255,255,0.18)`, // bar-line accent
-                    boxShadow: isActive ? `0 0 12px ${C.amber}80` : 'none',
-                    opacity: isActive ? 1 : isNoChord ? 0.4 : dimByConf,
-                    cursor: onSeek ? 'pointer' : 'default',
-                    fontFamily: 'monospace',
-                    padding: '8px 4px',
-                  }}
-                  title={
-                    `m.${cell.index + 1} · ${cell.start.toFixed(2)}s–${cell.end.toFixed(2)}s` +
-                    `\n${cell.contributions.slice(0, 3).map(c => `${c.label} ${c.durationInMeasure.toFixed(2)}s (${c.confidence.toFixed(2)})`).join(' · ')}`
-                  }
-                >
-                  <span style={{
-                    fontSize: 9, opacity: 0.55, lineHeight: 1,
-                    color: isActive ? '#000' : C.textMut,
-                  }}>
-                    m.{cell.index + 1}
-                  </span>
-                  {/* R17 — beat dots inside the measure cell (1·2·3·4) */}
-                  <div className="flex gap-1 mt-1">
-                    {Array.from({ length: beatsPerMeasure }, (_, b) => (
-                      <span
-                        key={b}
-                        style={{
-                          width: 4,
-                          height: 4,
-                          borderRadius: '50%',
-                          background: isActive
-                            ? b === 0 ? '#000' : 'rgba(0,0,0,0.45)'
-                            : b === 0 ? '#fbbc00aa' : 'rgba(255,255,255,0.2)',
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <span style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.1, marginTop: 4 }}>
-                    {normalizeLabel(cell.label)}
-                  </span>
-                  {!isNoChord && extractRoot(cell.label) && (
-                    <span
-                      title="베이스 루트 노트 (Stage 1: 이 음만 짚기)"
-                      style={{
-                        fontSize: 10,
-                        marginTop: 3,
-                        padding: '1px 5px',
-                        borderRadius: 3,
-                        background: isActive
-                          ? 'rgba(0,0,0,0.15)'
-                          : 'rgba(126,255,139,0.12)',
-                        color: isActive ? '#000' : '#7eff8b',
-                        fontWeight: 600,
-                        letterSpacing: '0.04em',
-                      }}
-                    >
-                      ♭ {extractRoot(cell.label)}
-                    </span>
-                  )}
-                  {ambiguous && (
-                    <span style={{
-                      fontSize: 9, opacity: 0.55, marginTop: 2,
-                      color: isActive ? '#000' : C.textMut,
-                    }}>
-                      / {normalizeLabel(cell.contributions[1].label)}?
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
+        <MeasureGrid
+          visibleMeasures={visibleMeasures}
+          activeIdx={activeIdx}
+          beatsPerMeasure={beatsPerMeasure}
+          trimLo={measureTrim.lo}
+          onSeek={onSeek}
+          scrollRef={scrollRef}
+        />
       )}
 
       {phase === 'unavailable' && (
