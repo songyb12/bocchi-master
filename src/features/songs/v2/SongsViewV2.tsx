@@ -36,6 +36,7 @@ import {
 import { StemSeparator } from '../StemSeparator'
 import { StageMode } from '../StageMode'
 import { ChordTimeline } from '../ChordTimeline'
+import { LeadSheetViewer } from '../LeadSheetViewer'
 import { StagesPanel } from '../StagesPanel'
 import type { GpLibraryEntry } from '../gpLibrary'
 import { C } from './theme'
@@ -507,6 +508,15 @@ export function SongsViewV2() {
               externalChords={importedPractice?.chords}
               externalDurationSec={importedPractice?.durationSec ?? undefined}
               externalTitle={importedPractice?.title}
+            />
+          )}
+
+          {/* ── Lead Sheet (AudioChord /transcribe/leadsheet) — needs a library
+                file_id, so GP tabs are excluded like the chord timeline ─────── */}
+          {(selectedSong || importedPractice) && (
+            <LeadSheetViewer
+              fileId={selectedSong ? `yt_${selectedSong.youtubeId}` : importedPractice?.fileId ?? null}
+              title={selectedSong?.title ?? importedPractice?.title}
             />
           )}
 

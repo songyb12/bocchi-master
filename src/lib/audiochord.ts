@@ -181,6 +181,64 @@ export function separate(input: SeparateInput) {
   return postForm<SeparationResult>("/separate", fd, "separate");
 }
 
+// --- transcription (lead sheet) ---
+// Hand-written mirror of spec/openapi.json `LeadSheetResult` — the generated
+// audiochord.types.ts predates /transcribe/*; fold into codegen on next refresh.
+export interface LeadSheetResult {
+  file_id?: string | null;
+  /** MIDI slot used for the melody staff, e.g. 'vocal', 'auto' */
+  instrument_hint: string;
+  elapsed_sec: number;
+  /** Tempo derived from the beat grid (median beat interval) */
+  song_bpm: number;
+  /** Estimated or provided key, e.g. 'C major' */
+  key?: string | null;
+  time_signature: string;
+  subdivision: number;
+  measure_count: number;
+  note_count: number;
+  chord_count: number;
+  /** Library URL of the lead sheet MusicXML (melody + <harmony>) */
+  musicxml_url: string;
+  /** Library URL of the rendered SVG, if produced */
+  svg_url?: string | null;
+}
+
+export interface LeadSheetInput {
+  file_id: string;
+  instrument_hint?: string;
+  subdivision?: number;
+  key?: string;
+  time_signature?: string;
+}
+
+/**
+ * POST /transcribe/leadsheet — Real Book-style melody + chord symbols.
+ * Requires pitch-to-midi to have run for the track; cached beats/chords are
+ * reused, chords go to the GPU worker on a miss (503 if down).
+ *
+ * Uses acFetch so server-down/auth/timeout surface as ACRequestError; other
+ * HTTP errors (404 = melody MIDI missing, 503 = GPU worker down) throw
+ * AudioChordError with the response detail.
+ */
+export async function transcribeLeadsheet(
+  input: LeadSheetInput,
+  opts: { timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<LeadSheetResult> {
+  const body = toUrlEncoded(input as unknown as Record<string, unknown>);
+  const r = await acFetch(`${BASE}/transcribe/leadsheet`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  }, { timeoutMs: opts.timeoutMs ?? 180_000, signal: opts.signal });
+  if (!r.ok) {
+    let detail: unknown;
+    try { detail = await r.json(); } catch { /* ignore */ }
+    throw new AudioChordError(r.status, "transcribe/leadsheet", detail);
+  }
+  return (await r.json()) as LeadSheetResult;
+}
+
 // --- library ---
 export function listLibrary() {
   return getJson<LibraryList>("/library", "library");
