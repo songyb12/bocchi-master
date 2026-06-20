@@ -34,6 +34,13 @@ describe('recordSession streak', () => {
     expect(recordSession(plan('2026-06-10'), ['warmup']).streakDays).toBe(2)
   })
 
+  it('increments across month and year date boundaries', () => {
+    expect(recordSession(plan('2026-06-30'), ['warmup']).streakDays).toBe(1)
+    expect(recordSession(plan('2026-07-01'), ['warmup']).streakDays).toBe(2)
+    expect(recordSession(plan('2026-12-31'), ['warmup']).streakDays).toBe(1)
+    expect(recordSession(plan('2027-01-01'), ['warmup']).streakDays).toBe(2)
+  })
+
   it('resets to 1 after a gap of more than one day', () => {
     recordSession(plan('2026-06-01'), ['warmup'])
     expect(recordSession(plan('2026-06-05'), ['warmup']).streakDays).toBe(1)
@@ -51,5 +58,26 @@ describe('recordSession streak', () => {
     const progress = JSON.parse(localStorage.getItem('bocchi.progress.bass')!)
     expect(progress.xp).toBe(10)
     expect(progress.sessionXpByDate['2026-06-10']).toBe(10)
+  })
+
+  it('caps entries at the newest 60 sessions', () => {
+    for (let index = 0; index < 61; index++) {
+      const date = new Date(Date.UTC(2026, 4, 1 + index)).toISOString().slice(0, 10)
+      recordSession(plan(date, 1), ['warmup'])
+    }
+
+    const log = recordSession(plan('2026-07-01', 1), ['warmup'])
+    expect(log.entries).toHaveLength(60)
+    expect(log.entries[0].date).toBe('2026-07-01')
+    expect(log.entries.at(-1)?.date).toBe('2026-05-03')
+  })
+
+  it('awards only newly added minutes when a same-day session expands', () => {
+    recordSession(plan('2026-06-10', 10), ['warmup'])
+    recordSession(plan('2026-06-10', 15), ['warmup'])
+
+    const progress = JSON.parse(localStorage.getItem('bocchi.progress.bass')!)
+    expect(progress.xp).toBe(15)
+    expect(progress.sessionXpByDate['2026-06-10']).toBe(15)
   })
 })

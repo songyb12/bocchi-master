@@ -1,4 +1,4 @@
-// ToneVocabulary — 7 tone adjectives with mini frequency spectrum bars.
+// ToneVocabulary — 8 tone adjectives with mini frequency spectrum bars.
 // Each card has 3 bars (low/mid/high) showing typical frequency emphasis.
 
 interface Vocab {
@@ -17,6 +17,7 @@ const VOCAB: Vocab[] = [
   { term: 'Growl',   ko: '그라울',  bars: [0.40, 0.85, 0.70], desc: '"그르르". 어퍼미드~고역 강조',             analogy: '살짝 클리핑 + 고차 하모닉' },
   { term: 'Grunt',   ko: '그런트',  bars: [0.60, 0.85, 0.40], desc: '"그르엉". 로우미드 + 약한 오버드라이브',  analogy: '비대칭 클리핑' },
   { term: 'Sizzle',  ko: '시즐',    bars: [0.25, 0.40, 0.95], desc: '반짝거림. 8kHz↑ 하모닉',                   analogy: '고차 오버톤 잔향' },
+  { term: 'Scooped', ko: '스쿱',    bars: [0.90, 0.25, 0.80], desc: '슬랩 전형. 미드 깎고 저+고 부각(스마일 EQ). 합주에선 묻힘 주의', analogy: 'V자 노치 필터 (250~800Hz 컷)' },
   { term: 'Mud',     ko: '머드',    bars: [0.70, 0.95, 0.30], desc: '답답. 200~300Hz 과다',                     analogy: '콤필터처럼 마스킹', warn: true },
 ]
 
@@ -73,12 +74,16 @@ export function ToneVocabulary() {
               </div>
               <div className="flex gap-2 mt-1">
                 {LABELS.map((l, i) => (
-                  <div
-                    key={i}
-                    className="font-mono text-[9px] text-center"
-                    style={{ flex: 1, color: '#555' }}
-                  >
-                    {l}
+                  <div key={i} className="text-center" style={{ flex: 1 }}>
+                    <div
+                      className="font-mono"
+                      style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.1, color: accent }}
+                    >
+                      {Math.round(v.bars[i] * 100)}
+                    </div>
+                    <div className="font-mono text-[9px]" style={{ color: '#555' }}>
+                      {l}
+                    </div>
                   </div>
                 ))}
               </div>

@@ -62,6 +62,23 @@ describe('applyDrillCompletion (pure)', () => {
   it('returns null for an unknown drill id', () => {
     expect(applyDrillCompletion(emptyProgress(), 'bass', 'no-such-drill')).toBeNull()
   })
+
+  it('preserves session XP ledger fields while completing drills', () => {
+    const drill = LESSON.drills[0]
+    const result = applyDrillCompletion(
+      {
+        ...emptyProgress(),
+        xp: 12,
+        sessionXpByDate: { '2026-06-10': 12 },
+      },
+      'bass',
+      drill.id,
+    )
+
+    expect(result).not.toBeNull()
+    expect(result!.progress.sessionXpByDate).toEqual({ '2026-06-10': 12 })
+    expect(result!.progress.xp).toBe(12 + drill.xpReward)
+  })
 })
 
 describe('markDrillComplete (localStorage)', () => {

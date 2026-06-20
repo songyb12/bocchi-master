@@ -79,7 +79,7 @@ export function LearnView() {
           <SignalChainDiagram />
         </Section>
 
-        <Section number="01" title="톤 어휘" subtitle="vocabulary · 7 adjectives">
+        <Section number="01" title="톤 어휘" subtitle="vocabulary · 8 adjectives">
           <p style={{ color: '#aaa', fontSize: 13, lineHeight: 1.6, maxWidth: 800 }}>
             좋아하는 곡의 베이스에 위 어휘를 붙여보기. 세 막대는 저/중/고 주파수 강도 분포.
           </p>

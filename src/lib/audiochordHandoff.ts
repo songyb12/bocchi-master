@@ -30,7 +30,12 @@ function decodeBase64Url(value: string): string {
 function findHandoffToken(hash: string): string | null {
   const body = hash.startsWith('#') ? hash.slice(1) : hash
   const match = body.match(/(?:^|[?&])audiochord=([^&]+)/)
-  return match ? decodeURIComponent(match[1]) : null
+  if (!match) return null
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return null
+  }
 }
 
 function asFiniteNumber(value: unknown): number | null {
